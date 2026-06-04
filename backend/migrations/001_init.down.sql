@@ -1,0 +1,17 @@
+DROP TABLE IF EXISTS failed_requests      CASCADE;
+DROP TABLE IF EXISTS proxy_requests      CASCADE;
+DROP TABLE IF EXISTS audit_events        CASCADE;
+DROP TABLE IF EXISTS monthly_usage_aggregates CASCADE;
+DROP TABLE IF EXISTS usage_events        CASCADE;
+DROP TABLE IF EXISTS tsa_upstreams       CASCADE;
+DROP TABLE IF EXISTS tenant_quotas       CASCADE;
+DROP TABLE IF EXISTS plans               CASCADE;
+DROP TABLE IF EXISTS tenant_ip_allowlist CASCADE;
+DROP TABLE IF EXISTS api_credentials     CASCADE;
+DROP TABLE IF EXISTS tenants             CASCADE;
+DROP TABLE IF EXISTS admin_user_roles    CASCADE;
+DROP TABLE IF EXISTS admin_users         CASCADE;
+DROP TABLE IF EXISTS roles               CASCADE;
+DROP FUNCTION IF EXISTS set_updated_at CASCADE;
+DROP EXTENSION IF EXISTS pg_trgm;
+DROP EXTENSION IF EXISTS pgcrypto;

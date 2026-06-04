@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ssh -i /c/Users/jesus/.ssh/encuestas ubuntu@54.39.181.13 \"uname -a\")",
+      "Bash(ssh -i /c/Users/jesus/.ssh/encuestas -o StrictHostKeyChecking=no ubuntu@54.39.181.13 \"uname -a\")",
+      "Bash(ssh -i ~/.ssh/encuestas ubuntu@54.39.181.13 \"ls /opt/tsa-proxy/backend/migrations/ | sort\")",
+      "Bash(ssh -i ~/.ssh/encuestas ubuntu@54.39.181.13 \"cd /opt/tsa-proxy && docker compose exec postgres psql -U tsa -d tsa -c '\\\\dt' 2>/dev/null | grep -i user\")",
+      "Bash(scp -i ~/.ssh/encuestas C:/tmp/reset_admin_pw.py ubuntu@54.39.181.13:/tmp/reset_admin_pw.py)",
+      "Bash(ssh -i ~/.ssh/encuestas ubuntu@54.39.181.13 \"python3 /tmp/reset_admin_pw.py && rm /tmp/reset_admin_pw.py\")",
+      "Bash(ls -la /opt/tsa-proxy 2>&1 | head -50)",
+      "Bash(find /opt/tsa-proxy -maxdepth 2 -type d | head -100)",
+      "Bash(xargs ls -la)",
+      "Bash(cp \"X:/My Folders/LLAVES/QA_TSA_PROXY_KEY\" ~/.ssh/qa_tsa_proxy_key)",
+      "Bash(chmod 600 ~/.ssh/qa_tsa_proxy_key)",
+      "Read(//c/Users/jesus/.ssh/**)",
+      "Bash(ssh-keyscan -H 54.39.180.141)",
+      "Bash(ssh -i ~/.ssh/qa_tsa_proxy_key ubuntu@54.39.180.141 \"uname -a && pwd && whoami\")",
+      "Bash(cat >> *)",
+      "Bash(scp prod-tsa:/opt/tsa-proxy/docker-compose.yml /tmp/docker-compose-prod.yml)",
+      "Bash(scp -r prod-tsa:/opt/tsa-proxy/nginx /tmp/nginx-prod/)",
+      "Bash(scp prod-tsa:/opt/tsa-proxy/.env /tmp/.env-prod)",
+      "Read(//tmp/**)",
+      "Bash(scp /tmp/docker-compose-prod.yml qa-tsa:/opt/qa/docker-compose.yml)",
+      "Bash(scp /tmp/.env-qa-final qa-tsa:/opt/qa/.env)",
+      "Bash(scp -r /tmp/nginx-prod/* qa-tsa:/opt/qa/nginx/)",
+      "Bash(ssh qa-tsa *)",
+      "Bash(scp prod-tsa:/opt/tsa-proxy/nginx/nginx.conf qa-tsa:/opt/qa/nginx/)",
+      "Bash(scp prod-tsa:/opt/tsa-proxy/nginx/conf.d/*.conf qa-tsa:/opt/qa/nginx/conf.d/)",
+      "Bash(gh --version)",
+      "Bash(gh auth *)",
+      "Bash(gh repo *)",
+      "Bash(git init *)",
+      "Bash(git config *)",
+      "Bash(git add *)",
+      "Bash(git branch *)",
+      "Bash(git commit -m 'Initial commit: TSA Proxy multi-tenant infrastructure *)"
+    ]
+  }
+}

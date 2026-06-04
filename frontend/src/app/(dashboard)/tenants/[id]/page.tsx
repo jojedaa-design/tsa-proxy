@@ -1,0 +1,732 @@
+"use client";
+
+import { useState } from "react";
+import { useParams } from "next/navigation";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
+import { api, BasicAuthCredential } from "@/lib/api";
+
+type Tab = "credentials" | "ip-allowlist" | "quota" | "basic-auth" | "noauth";
+
+export default function TenantDetailPage() {
+  const { id } = useParams<{ id: string }>();
+  const qc = useQueryClient();
+  const [tab, setTab] = useState<Tab>("credentials");
+  const [showNewApiKey, setShowNewApiKey] = useState<string | null>(null);
+  const [showStampURL, setShowStampURL] = useState<string | null>(null);
+  const [newCredName, setNewCredName] = useState("");
+  const [newCIDR, setNewCIDR] = useState("");
+  const [newCIDRLabel, setNewCIDRLabel] = useState("");
+  const [error, setError] = useState("");
+  const [newBAUsername, setNewBAUsername] = useState("");
+  const [newBAName, setNewBAName] = useState("");
+  const [showNewBAResult, setShowNewBAResult] = useState<BasicAuthCredential | null>(null);
+  const [noauthName, setNoauthName] = useState("");
+
+  const { data: tenant, isLoading } = useQuery({
+    queryKey: ["tenant", id],
+    queryFn: () => api.getTenant(id),
+  });
+
+  const { data: creds } = useQuery({
+    queryKey: ["credentials", id],
+    queryFn: () => api.listCredentials(id),
+    enabled: tab === "credentials",
+  });
+
+  const { data: ips } = useQuery({
+    queryKey: ["ip-allowlist", id],
+    queryFn: () => api.listIPAllowlist(id),
+    enabled: tab === "ip-allowlist",
+  });
+
+  const { data: quota } = useQuery({
+    queryKey: ["quota", id],
+    queryFn: () => api.getQuota(id),
+    enabled: tab === "quota",
+  });
+
+  const { data: basicAuths } = useQuery({
+    queryKey: ["basic-auth", id],
+    queryFn: () => api.listBasicAuth(id),
+    enabled: tab === "basic-auth",
+  });
+
+  const { data: noauthData, isLoading: noauthLoading } = useQuery({
+    queryKey: ["noauth", id],
+    queryFn: () => api.getNoAuth(id),
+    enabled: tab === "noauth",
+  });
+
+  const createCredMut = useMutation({
+    mutationFn: () => api.createCredential(id, { name: newCredName || undefined }),
+    onSuccess: (data) => {
+      setShowNewApiKey(data.api_key ?? null);
+      setShowStampURL(data.stamp_url ?? null);
+      setNewCredName("");
+      qc.invalidateQueries({ queryKey: ["credentials", id] });
+    },
+    onError: () => setError("Error al crear la credencial"),
+  });
+
+  const revokeCredMut = useMutation({
+    mutationFn: (credId: string) => api.revokeCredential(credId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["credentials", id] }),
+  });
+
+  const rotateCredMut = useMutation({
+    mutationFn: (credId: string) => api.rotateCredential(credId),
+    onSuccess: (data) => {
+      setShowNewApiKey(data.api_key ?? null);
+      setShowStampURL(data.stamp_url ?? null);
+      qc.invalidateQueries({ queryKey: ["credentials", id] });
+    },
+  });
+
+  const createIPMut = useMutation({
+    mutationFn: () => api.createIPAllowlist(id, { cidr: newCIDR, label: newCIDRLabel || undefined }),
+    onSuccess: () => {
+      setNewCIDR(""); setNewCIDRLabel("");
+      qc.invalidateQueries({ queryKey: ["ip-allowlist", id] });
+    },
+    onError: () => setError("CIDR inválido o ya existe"),
+  });
+
+  const deleteIPMut = useMutation({
+    mutationFn: (entryId: string) => api.deleteIPAllowlist(entryId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["ip-allowlist", id] }),
+  });
+
+  const createBAMut = useMutation({
+    mutationFn: () => api.createBasicAuth(id, { username: newBAUsername, name: newBAName || undefined }),
+    onSuccess: (data) => {
+      setShowNewBAResult(data);
+      setNewBAUsername("");
+      setNewBAName("");
+      qc.invalidateQueries({ queryKey: ["basic-auth", id] });
+    },
+    onError: () => setError("Error al crear credencial Basic Auth. ¿El usuario ya existe?"),
+  });
+
+  const revokeBAMut = useMutation({
+    mutationFn: (credId: string) => api.revokeBasicAuth(credId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["basic-auth", id] }),
+  });
+
+  const enableNoAuthMut = useMutation({
+    mutationFn: () => api.enableNoAuth(id, noauthName || undefined),
+    onSuccess: () => {
+      setNoauthName("");
+      qc.invalidateQueries({ queryKey: ["noauth", id] });
+    },
+    onError: () => setError("Error al habilitar acceso TSP"),
+  });
+
+  const disableNoAuthMut = useMutation({
+    mutationFn: () => api.disableNoAuth(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["noauth", id] }),
+    onError: () => setError("Error al deshabilitar acceso TSP"),
+  });
+
+  const deleteNoAuthMut = useMutation({
+    mutationFn: () => api.deleteNoAuth(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["noauth", id] }),
+    onError: () => setError("Error al eliminar acceso TSP"),
+  });
+
+  if (isLoading) return <div className="text-gray-400 py-8 text-center">Cargando...</div>;
+  if (!tenant) return <div className="text-red-600">Cliente no encontrado</div>;
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <Link href="/tenants" className="text-sm text-gray-400 hover:text-gray-600">← Clientes</Link>
+          </div>
+          <h1 className="text-2xl font-bold text-gray-900">{tenant.name}</h1>
+          <p className="text-sm text-gray-500 font-mono">{tenant.slug}</p>
+        </div>
+        <span className={`badge ${tenant.status === "active" ? "badge-green" : "badge-yellow"}`}>
+          {tenant.status === "active" ? "Activo" : "Suspendido"}
+        </span>
+      </div>
+
+      {/* Tabs */}
+      <div className="border-b border-gray-200">
+        <div className="flex gap-6">
+          {(["credentials", "basic-auth", "noauth", "ip-allowlist", "quota"] as Tab[]).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
+                tab === t
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              {t === "credentials"  ? "Credenciales API" :
+               t === "basic-auth"   ? "Acceso TSA Privado" :
+               t === "noauth"       ? "Acceso TSP" :
+               t === "ip-allowlist" ? "IP Allowlist" : "Cuota"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {error && (
+        <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded p-3">
+          {error}
+          <button onClick={() => setError("")} className="ml-3 text-red-400 hover:text-red-600">✕</button>
+        </div>
+      )}
+
+      {/* API Key + URL de firma Modal */}
+      {showNewApiKey && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="card w-full max-w-xl p-6 mx-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Credencial creada</h2>
+                <p className="text-sm text-red-600 font-medium">⚠ Guarda esta información ahora. La API Key no se podrá ver nuevamente.</p>
+              </div>
+            </div>
+
+            {/* API Key */}
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">API Key (para integración de sistemas)</p>
+            <div className="bg-gray-900 rounded-lg p-3 font-mono text-xs text-green-400 break-all">
+              {showNewApiKey}
+            </div>
+            <button
+              onClick={() => { navigator.clipboard.writeText(showNewApiKey); }}
+              className="btn-secondary w-full mt-2 text-sm"
+            >
+              Copiar API Key
+            </button>
+
+            {/* URL de firma */}
+            {showStampURL && (
+              <div className="mt-4">
+                <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-1">
+                  🖊 URL para software de firma (DAVISIGN, Adobe, JSignPdf, etc.)
+                </p>
+                <p className="text-xs text-gray-500 mb-2">
+                  Configura esta URL en el campo "URL de la TSA". No necesitas usuario ni contraseña.
+                </p>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 font-mono text-xs text-blue-800 break-all">
+                  {showStampURL}
+                </div>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(showStampURL); }}
+                  className="w-full mt-2 px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                >
+                  Copiar URL de firma
+                </button>
+              </div>
+            )}
+
+            <button
+              onClick={() => { setShowNewApiKey(null); setShowStampURL(null); }}
+              className="btn-primary w-full mt-3"
+            >
+              Entendido, ya guardé esta información
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Basic Auth result modal */}
+      {showNewBAResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="card w-full max-w-xl p-6 mx-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Credencial Basic Auth creada</h2>
+                <p className="text-sm text-red-600 font-medium">Guarda esta contraseña ahora. No se podrá recuperar.</p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">URL del endpoint TSA</p>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 font-mono text-xs text-blue-800 break-all">
+                  {showNewBAResult.tsa_endpoint}
+                </div>
+                <button
+                  onClick={() => { if (showNewBAResult.tsa_endpoint) navigator.clipboard.writeText(showNewBAResult.tsa_endpoint!); }}
+                  className="w-full mt-2 px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                >
+                  Copiar URL
+                </button>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Usuario</p>
+                <div className="bg-gray-900 rounded-lg p-3 font-mono text-xs text-green-400">
+                  {showNewBAResult.username}
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Contraseña (solo visible ahora)</p>
+                <div className="bg-gray-900 rounded-lg p-3 font-mono text-xs text-yellow-400 break-all">
+                  {showNewBAResult.password}
+                </div>
+                <button
+                  onClick={() => { if (showNewBAResult.password) navigator.clipboard.writeText(showNewBAResult.password!); }}
+                  className="btn-secondary w-full mt-2 text-sm"
+                >
+                  Copiar contraseña
+                </button>
+              </div>
+
+              <p className="text-xs text-gray-500 bg-gray-50 border rounded p-2">
+                Configura esta URL, usuario y contraseña en el campo de TSA de tu software de firma (Adobe Reader, DAVISIGN, JSignPdf).
+              </p>
+            </div>
+
+            <button
+              onClick={() => setShowNewBAResult(null)}
+              className="btn-primary w-full mt-4"
+            >
+              Entendido, ya guardé esta información
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Credenciales */}
+      {tab === "credentials" && (
+        <div className="space-y-4">
+          <div className="flex gap-3">
+            <input
+              value={newCredName}
+              onChange={(e) => setNewCredName(e.target.value)}
+              className="input flex-1"
+              placeholder="Nombre de la credencial (ej: Producción 2025)"
+            />
+            <button onClick={() => createCredMut.mutate()} className="btn-primary">
+              {createCredMut.isPending ? "Creando..." : "+ Crear credencial"}
+            </button>
+          </div>
+
+          <div className="card overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">Clave</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">Nombre</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">URL de firma</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">Estado</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">Último uso</th>
+                  <th className="text-right px-4 py-3 font-medium text-gray-600">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {creds?.data.map((c) => (
+                  <tr key={c.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-mono text-xs text-gray-600">{c.key_prefix}</td>
+                    <td className="px-4 py-3 text-gray-700">{c.name ?? <span className="text-gray-400">Sin nombre</span>}</td>
+                    <td className="px-4 py-3">
+                      {c.url_token && c.status === "active" ? (
+                        <div className="flex items-center gap-1">
+                          <span className="font-mono text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded px-2 py-1 max-w-[180px] truncate" title={`https://tsa.bigdavi.com/ts/${c.url_token}`}>
+                            /ts/{c.url_token.slice(0,8)}…
+                          </span>
+                          <button
+                            onClick={() => navigator.clipboard.writeText(`https://tsa.bigdavi.com/ts/${c.url_token}`)}
+                            title="Copiar URL de firma"
+                            className="text-blue-400 hover:text-blue-600"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                          </button>
+                        </div>
+                      ) : <span className="text-gray-300 text-xs">—</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`badge ${c.status === "active" ? "badge-green" : "badge-red"}`}>
+                        {c.status === "active" ? "Activa" : c.status === "revoked" ? "Revocada" : "Expirada"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-gray-500 text-xs">
+                      {c.last_used_at
+                        ? new Date(c.last_used_at).toLocaleString("es-AR")
+                        : "Nunca usada"}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {c.status === "active" && (
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => rotateCredMut.mutate(c.id)}
+                            className="btn-secondary px-3 py-1 text-xs"
+                          >
+                            Rotar
+                          </button>
+                          <button
+                            onClick={() => { if (confirm("¿Revocar esta credencial?")) revokeCredMut.mutate(c.id); }}
+                            className="btn px-3 py-1 text-xs bg-red-50 text-red-700 border border-red-200 hover:bg-red-100"
+                          >
+                            Revocar
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Acceso TSA Privado (Basic Auth) */}
+      {tab === "basic-auth" && (
+        <div className="space-y-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
+            <strong>Acceso TSA Privado con HTTP Basic Auth</strong><br />
+            Cada cliente obtiene su propio usuario y contraseña para la URL <code className="bg-blue-100 px-1 rounded">POST https://tsa.bigdavi.com/ts</code>.
+            Compatible con Adobe Reader, DAVISIGN y JSignPdf.
+          </div>
+
+          <div className="flex gap-3">
+            <input
+              value={newBAUsername}
+              onChange={(e) => setNewBAUsername(e.target.value)}
+              className="input flex-1"
+              placeholder="Usuario (ej: acme-prod)"
+            />
+            <input
+              value={newBAName}
+              onChange={(e) => setNewBAName(e.target.value)}
+              className="input flex-1"
+              placeholder="Descripción (opcional)"
+            />
+            <button
+              onClick={() => createBAMut.mutate()}
+              disabled={createBAMut.isPending || !newBAUsername}
+              className="btn-primary"
+            >
+              {createBAMut.isPending ? "Creando..." : "+ Crear acceso"}
+            </button>
+          </div>
+
+          <div className="card overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">Usuario</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">Contraseña (prefijo)</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">Descripción</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">Estado</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">Creado</th>
+                  <th className="text-right px-4 py-3 font-medium text-gray-600">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {basicAuths?.data?.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-6 text-center text-gray-400 text-sm">
+                      Sin credenciales Basic Auth. Crea la primera arriba.
+                    </td>
+                  </tr>
+                )}
+                {basicAuths?.data?.map((c) => (
+                  <tr key={c.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 font-mono text-sm text-gray-800">{c.username}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-gray-500">{c.key_prefix}</td>
+                    <td className="px-4 py-3 text-gray-600">{c.name ?? <span className="text-gray-400">—</span>}</td>
+                    <td className="px-4 py-3">
+                      <span className={`badge ${c.status === "active" ? "badge-green" : "badge-red"}`}>
+                        {c.status === "active" ? "Activa" : "Revocada"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-gray-500 text-xs">
+                      {new Date(c.created_at).toLocaleString("es-AR")}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {c.status === "active" && (
+                        <button
+                          onClick={() => { if (confirm(`¿Revocar acceso de "${c.username}"?`)) revokeBAMut.mutate(c.id); }}
+                          className="btn px-3 py-1 text-xs bg-red-50 text-red-700 border border-red-200 hover:bg-red-100"
+                        >
+                          Revocar
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Tab: IP Allowlist */}
+      {tab === "ip-allowlist" && (
+        <div className="space-y-4">
+          <div className="flex gap-3">
+            <input
+              value={newCIDR}
+              onChange={(e) => setNewCIDR(e.target.value)}
+              className="input flex-1"
+              placeholder="IP o CIDR (ej: 203.0.113.1 o 10.0.0.0/24)"
+            />
+            <input
+              value={newCIDRLabel}
+              onChange={(e) => setNewCIDRLabel(e.target.value)}
+              className="input flex-1"
+              placeholder="Etiqueta (opcional)"
+            />
+            <button onClick={() => createIPMut.mutate()} className="btn-primary">
+              + Agregar
+            </button>
+          </div>
+
+          {ips?.data.length === 0 && (
+            <div className="text-sm text-gray-400 bg-blue-50 border border-blue-100 rounded p-3">
+              Sin restricciones de IP configuradas — se permite cualquier IP.
+            </div>
+          )}
+
+          <div className="space-y-2">
+            {ips?.data.filter((e) => e.is_active).map((entry) => (
+              <div key={entry.id} className="card flex items-center justify-between px-4 py-3">
+                <div>
+                  <span className="font-mono text-sm text-gray-800">{entry.cidr}</span>
+                  {entry.label && <span className="ml-3 text-xs text-gray-500">{entry.label}</span>}
+                </div>
+                <button
+                  onClick={() => { if (confirm("¿Eliminar esta IP?")) deleteIPMut.mutate(entry.id); }}
+                  className="text-red-400 hover:text-red-600 text-sm"
+                >
+                  Eliminar
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Acceso TSP (sin credenciales) */}
+      {tab === "noauth" && (
+        <div className="space-y-5">
+          {/* Info box */}
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-900">
+            <p className="font-semibold mb-1">Acceso TSP sin credenciales (por IP)</p>
+            <p>
+              Permite que clientes como <strong>DAVISIGN</strong> con EU DSS envíen requests al endpoint{" "}
+              <code className="bg-amber-100 px-1 rounded font-mono">POST https://tsa.bigdavi.com/tsp</code> sin
+              usuario ni contraseña. La autenticación se realiza validando la <strong>IP de origen</strong> contra
+              el IP Allowlist del cliente.
+            </p>
+            <p className="mt-2 text-amber-700">
+              ⚠ <strong>Por defecto BLOQUEADO</strong> — aunque esté habilitado, si no hay IPs configuradas en
+              el Allowlist, todos los requests serán rechazados.
+            </p>
+          </div>
+
+          {noauthLoading ? (
+            <div className="text-gray-400 py-4 text-center text-sm">Cargando...</div>
+          ) : noauthData?.enabled ? (
+            /* ── Acceso habilitado ─────────────────────────── */
+            <div className="space-y-4">
+              <div className="card p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <span className={`badge ${noauthData.access?.status === "active" ? "badge-green" : "badge-yellow"}`}>
+                      {noauthData.access?.status === "active" ? "Activo" : "Suspendido"}
+                    </span>
+                    <span className="text-sm text-gray-700 font-medium">
+                      {noauthData.access?.name ?? "Acceso TSP sin credenciales"}
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    {noauthData.access?.status === "active" ? (
+                      <button
+                        onClick={() => { if (confirm("¿Suspender el acceso TSP sin credenciales?")) disableNoAuthMut.mutate(); }}
+                        disabled={disableNoAuthMut.isPending}
+                        className="btn px-3 py-1.5 text-xs bg-yellow-50 text-yellow-700 border border-yellow-200 hover:bg-yellow-100"
+                      >
+                        {disableNoAuthMut.isPending ? "Suspendiendo..." : "Suspender"}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => enableNoAuthMut.mutate()}
+                        disabled={enableNoAuthMut.isPending}
+                        className="btn-primary px-3 py-1.5 text-xs"
+                      >
+                        {enableNoAuthMut.isPending ? "Activando..." : "Reactivar"}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => { if (confirm("¿Eliminar definitivamente el acceso TSP? Esta acción no se puede deshacer.")) deleteNoAuthMut.mutate(); }}
+                      disabled={deleteNoAuthMut.isPending}
+                      className="btn px-3 py-1.5 text-xs bg-red-50 text-red-700 border border-red-200 hover:bg-red-100"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+                </div>
+
+                {/* URL del endpoint */}
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                    URL para configurar en DAVISIGN / EU DSS
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 font-mono text-sm text-blue-800">
+                      https://tsa.bigdavi.com/tsp
+                    </div>
+                    <button
+                      onClick={() => navigator.clipboard.writeText("https://tsa.bigdavi.com/tsp")}
+                      className="px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                    >
+                      Copiar
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">
+                    En DAVISIGN: <em>Configuración → TSA → URL del servicio de sellado</em>. No ingreses usuario ni contraseña.
+                  </p>
+                </div>
+              </div>
+
+              {/* Recordatorio IP Allowlist */}
+              <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 text-sm text-blue-800">
+                <p className="font-medium mb-1">Paso obligatorio: agregar la IP del cliente</p>
+                <p>
+                  Dirígete a la pestaña <strong>IP Allowlist</strong> y agrega la IP pública del servidor o
+                  máquina que ejecuta DAVISIGN. Sin esa IP, los requests serán rechazados aunque el acceso
+                  esté habilitado.
+                </p>
+              </div>
+            </div>
+          ) : (
+            /* ── Acceso no habilitado ──────────────────────── */
+            <div className="card p-6 max-w-lg">
+              <h3 className="text-base font-semibold text-gray-900 mb-1">Habilitar acceso TSP sin credenciales</h3>
+              <p className="text-sm text-gray-500 mb-4">
+                Una vez habilitado, el cliente podrá enviar requests a{" "}
+                <code className="font-mono text-xs bg-gray-100 px-1 rounded">https://tsa.bigdavi.com/tsp</code>{" "}
+                sin usuario ni contraseña. Deberás agregar su IP en el Allowlist para que funcione.
+              </p>
+              <div className="flex gap-3">
+                <input
+                  value={noauthName}
+                  onChange={(e) => setNoauthName(e.target.value)}
+                  className="input flex-1"
+                  placeholder="Descripción opcional (ej: DAVISIGN producción)"
+                />
+                <button
+                  onClick={() => enableNoAuthMut.mutate()}
+                  disabled={enableNoAuthMut.isPending}
+                  className="btn-primary"
+                >
+                  {enableNoAuthMut.isPending ? "Habilitando..." : "Habilitar"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tab: Cuota */}
+      {tab === "quota" && quota && (
+        <QuotaForm tenantId={id} initialQuota={quota} />
+      )}
+    </div>
+  );
+}
+
+function QuotaForm({ tenantId, initialQuota }: {
+  tenantId: string;
+  initialQuota: { monthly_limit: number; burst_per_minute: number; hard_limit: boolean; auto_suspend: boolean; reset_day: number };
+}) {
+  const qc = useQueryClient();
+  const [monthly, setMonthly] = useState(String(initialQuota.monthly_limit));
+  const [burst, setBurst] = useState(String(initialQuota.burst_per_minute));
+  const [hardLimit, setHardLimit] = useState(initialQuota.hard_limit);
+  const [autoSuspend, setAutoSuspend] = useState(initialQuota.auto_suspend);
+  const [saved, setSaved] = useState(false);
+
+  const mut = useMutation({
+    mutationFn: () => api.updateQuota(tenantId, {
+      monthly_limit: parseInt(monthly),
+      burst_per_minute: parseInt(burst),
+      hard_limit: hardLimit,
+      auto_suspend: autoSuspend,
+      reset_day: initialQuota.reset_day,
+    }),
+    onSuccess: () => {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+      qc.invalidateQueries({ queryKey: ["quota", tenantId] });
+    },
+  });
+
+  return (
+    <div className="card p-6 max-w-lg space-y-5">
+      <h2 className="text-base font-semibold text-gray-900">Configuración de cuota</h2>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="label">Límite mensual</label>
+          <input value={monthly} onChange={(e) => setMonthly(e.target.value)} className="input" type="number" min="1" />
+          <p className="text-xs text-gray-400 mt-1">sellos por mes</p>
+        </div>
+        <div>
+          <label className="label">Burst por minuto</label>
+          <input value={burst} onChange={(e) => setBurst(e.target.value)} className="input" type="number" min="1" />
+          <p className="text-xs text-gray-400 mt-1">máx. requests / minuto</p>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <label className="flex items-center gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={hardLimit}
+            onChange={(e) => setHardLimit(e.target.checked)}
+            className="w-4 h-4 rounded border-gray-300 text-blue-600"
+          />
+          <div>
+            <span className="text-sm font-medium text-gray-700">Límite estricto (hard limit)</span>
+            <p className="text-xs text-gray-400">Rechaza requests cuando se agota la cuota</p>
+          </div>
+        </label>
+
+        <label className="flex items-center gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={autoSuspend}
+            onChange={(e) => setAutoSuspend(e.target.checked)}
+            className="w-4 h-4 rounded border-gray-300 text-blue-600"
+          />
+          <div>
+            <span className="text-sm font-medium text-gray-700">Suspender automáticamente</span>
+            <p className="text-xs text-gray-400">Suspende el cliente al agotar la cuota mensual</p>
+          </div>
+        </label>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <button onClick={() => mut.mutate()} disabled={mut.isPending} className="btn-primary">
+          {mut.isPending ? "Guardando..." : "Guardar cuota"}
+        </button>
+        {saved && <span className="text-sm text-green-600">✓ Guardado</span>}
+      </div>
+    </div>
+  );
+}

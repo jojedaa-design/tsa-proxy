@@ -1,0 +1,81 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Go
+backend/bin/
+backend/.air.toml
+*.exe
+*.exe~
+*.dll
+*.so
+*.so.*
+*.dylib
+*.test
+*.out
+*.prof
+
+# Node/Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/dist/
+frontend/.env.local
+frontend/.cache
+
+# Docker
+.dockerignore
+docker-compose.override.yml
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite
+pgdata/
+redisdata/
+
+# Backup files
+*.bak
+*.backup
+/var/backups/
+
+# Secrets (keep them local)
+**/secrets/
+**/*.ppk
+**/*.pem
+**/*.key
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Build artifacts
+dist/
+build/
+out/
+
+# Temporary
+.tmp/
+temp/
+/tmp/
+
+# Git
+.git/
+
+# Editor temporary files
+*.swp
+*.swo
+*~
+.#*

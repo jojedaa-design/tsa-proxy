@@ -1,0 +1,9 @@
+version: "3.9"
+
+services:
+  genhash:
+    image: golang:1.21-alpine
+    volumes:
+      - ./backend/cmd/genhash:/app
+    working_dir: /app
+    command: go run main.go

@@ -62,7 +62,8 @@
       "Bash(ssh -i 'C:\\\\Users\\\\jesus/.ssh/encuestas' ubuntu@54.39.181.13 'cd /opt/tsa-proxy && git log --oneline -1 2>/dev/null || echo '\\\\''Not a git repo'\\\\''')",
       "Bash(ssh -i 'C:\\\\Users\\\\jesus/.ssh/qa_tsa_proxy_key' ubuntu@54.39.180.141 'head -1 /opt/qa/docker-compose.yml')",
       "Bash(ssh -i 'C:\\\\Users\\\\jesus/.ssh/encuestas' ubuntu@54.39.181.13 'head -1 /opt/tsa-proxy/docker-compose.yml')",
-      "Bash(ssh -i 'C:\\\\Users\\\\jesus/.ssh/qa_tsa_proxy_key' ubuntu@54.39.180.141 'cd /opt/qa && docker compose logs backend 2>&1 | tail -200 | grep -A5 -B5 '\\\\''upstreams\\\\|upstream'\\\\''')"
+      "Bash(ssh -i 'C:\\\\Users\\\\jesus/.ssh/qa_tsa_proxy_key' ubuntu@54.39.180.141 'cd /opt/qa && docker compose logs backend 2>&1 | tail -200 | grep -A5 -B5 '\\\\''upstreams\\\\|upstream'\\\\''')",
+      "PowerShell(ssh -i \"C:\\\\Users\\\\jesus\\\\.ssh\\\\qa_tsa_proxy_key\" ubuntu@54.39.180.141 \"cd /opt/qa && docker compose up -d\")"
     ]
   }
 }

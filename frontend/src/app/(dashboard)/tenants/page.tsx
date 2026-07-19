@@ -196,7 +196,7 @@ function TenantRow({ tenant, onSuspend, onReactivate }: {
 
 // ── Wizard de creación ────────────────────────────────────────
 
-type WizardStep = "info" | "ip" | "quota" | "result";
+type WizardStep = "create" | "result";
 
 interface IPEntry { cidr: string; label: string; }
 
@@ -208,63 +208,23 @@ interface CreationResult {
   burstPerMinute: number;
 }
 
-function StepIndicator({ current }: { current: WizardStep }) {
-  const steps: { id: WizardStep; label: string }[] = [
-    { id: "info",  label: "Datos" },
-    { id: "ip",    label: "IPs" },
-    { id: "quota", label: "Cuota" },
-    { id: "result", label: "Listo" },
-  ];
-  const idx = steps.findIndex(s => s.id === current);
-  return (
-    <div className="flex items-center gap-1 mb-6">
-      {steps.map((s, i) => (
-        <div key={s.id} className="flex items-center gap-1">
-          <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-colors ${
-            i < idx ? "bg-green-500 text-white" :
-            i === idx ? "bg-blue-600 text-white" :
-            "bg-gray-100 text-gray-400"
-          }`}>
-            {i < idx ? "✓" : i + 1}
-          </div>
-          <span className={`text-xs ${i === idx ? "text-blue-600 font-medium" : "text-gray-400"}`}>
-            {s.label}
-          </span>
-          {i < steps.length - 1 && <div className="w-6 h-px bg-gray-200 mx-1" />}
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function CreateTenantWizard({ onClose, onCreated }: {
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const [step, setStep] = useState<WizardStep>("info");
+  const [step, setStep] = useState<WizardStep>("create");
 
-  // Paso 1 — Info
-  const [name, setName]   = useState("");
-  const [slug, setSlug]   = useState("");
-  const [email, setEmail] = useState("");
-  const [credName, setCredName] = useState("");
-
-  // Paso 2 — IP
+  // Campos de entrada
+  const [name, setName] = useState("");
   const [ipEntries, setIpEntries] = useState<IPEntry[]>([]);
-  const [ipInput, setIpInput]     = useState("");
-  const [ipLabel, setIpLabel]     = useState("");
+  const [ipInput, setIpInput] = useState("");
+  const [ipLabel, setIpLabel] = useState("");
   const [allowAllIPs, setAllowAllIPs] = useState(false);
 
-  // Paso 3 — Cuota
-  const [monthly, setMonthly]     = useState("1000");
-  const [burst, setBurst]         = useState("10");
-  const [hardLimit, setHardLimit] = useState(true);
-  const [autoSuspend, setAutoSuspend] = useState(false);
-
   // Resultado
-  const [result, setResult]   = useState<CreationResult | null>(null);
+  const [result, setResult] = useState<CreationResult | null>(null);
   const [creating, setCreating] = useState(false);
-  const [error, setError]     = useState("");
+  const [error, setError] = useState("");
 
   function addIP() {
     const cidr = ipInput.trim();
@@ -284,16 +244,16 @@ function CreateTenantWizard({ onClose, onCreated }: {
     setCreating(true);
     setError("");
     try {
-      // 1. Crear tenant
+      // 1. Crear tenant (con slug automático)
       const tenant = await api.createTenant({
         name,
-        slug: slug || undefined,
-        contact_email: email || undefined,
+        slug: undefined,
+        contact_email: undefined,
       });
 
       // 2. Crear credencial (genera URL de firma automáticamente)
       const credential = await api.createCredential(tenant.id, {
-        name: credName || `${name} — Principal`,
+        name: `${name} — Principal`,
       });
 
       // 3. Agregar IPs (en paralelo)
@@ -305,16 +265,18 @@ function CreateTenantWizard({ onClose, onCreated }: {
         );
       }
 
-      // 4. Configurar cuota
+      // 4. Configurar cuota con valores por defecto
+      const monthlyLimit = 1000;
+      const burstPerMinute = 10;
       await api.updateQuota(tenant.id, {
-        monthly_limit:   parseInt(monthly)  || 1000,
-        burst_per_minute: parseInt(burst)   || 10,
-        hard_limit:      hardLimit,
-        auto_suspend:    autoSuspend,
-        reset_day:       1,
+        monthly_limit: monthlyLimit,
+        burst_per_minute: burstPerMinute,
+        hard_limit: true,
+        auto_suspend: false,
+        reset_day: 1,
       });
 
-      setResult({ tenant, credential, ips: ipEntries, monthlyLimit: parseInt(monthly), burstPerMinute: parseInt(burst) });
+      setResult({ tenant, credential, ips: ipEntries, monthlyLimit, burstPerMinute });
       setStep("result");
     } catch (err: any) {
       setError(err?.message || err?.error || "Error al crear el cliente. Verificá los datos e intentá nuevamente.");
@@ -328,34 +290,72 @@ function CreateTenantWizard({ onClose, onCreated }: {
       <div className="card w-full max-w-lg p-6 mx-4 max-h-[90vh] overflow-y-auto">
 
         {step !== "result" && (
-          <>
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-lg font-semibold text-gray-900">Nuevo cliente</h2>
-              <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
-            </div>
-            <StepIndicator current={step} />
-          </>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">Nuevo cliente</h2>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl leading-none">×</button>
+          </div>
         )}
 
-        {/* ── Paso 1: Datos ── */}
-        {step === "info" && (
+        {/* ── Crear Cliente: Nombre + Restricción de IP ── */}
+        {step === "create" && (
           <div className="space-y-4">
+            {/* Nombre del cliente */}
             <div>
-              <label className="label">Nombre *</label>
-              <input value={name} onChange={e => setName(e.target.value)} className="input" placeholder="Acme Corp" autoFocus />
+              <label className="label">Nombre del cliente *</label>
+              <input
+                value={name}
+                onChange={e => setName(e.target.value)}
+                className="input"
+                placeholder="Ej: Acme Corp"
+                autoFocus
+              />
             </div>
-            <div>
-              <label className="label">Slug <span className="text-gray-400 font-normal">(se genera automáticamente)</span></label>
-              <input value={slug} onChange={e => setSlug(e.target.value)} className="input font-mono" placeholder="acme-corp" />
-            </div>
-            <div>
-              <label className="label">Email de contacto</label>
-              <input value={email} onChange={e => setEmail(e.target.value)} className="input" type="email" placeholder="admin@acme.com" />
-            </div>
-            <div>
-              <label className="label">Nombre de la credencial</label>
-              <input value={credName} onChange={e => setCredName(e.target.value)} className="input" placeholder={`${name || "Cliente"} — Principal`} />
-              <p className="text-xs text-gray-400 mt-1">Se creará automáticamente una URL de firma única para este cliente.</p>
+
+            {/* Restricción de IP */}
+            <div className="border-t pt-4">
+              <h3 className="text-sm font-semibold text-gray-800 mb-2">Restricción de IP</h3>
+              <p className="text-xs text-gray-500 mb-3">
+                Dejá vacío para permitir cualquier IP, o agregá las direcciones autorizadas.
+              </p>
+
+              <label className="flex items-center gap-3 cursor-pointer select-none mb-3">
+                <input
+                  type="checkbox"
+                  checked={allowAllIPs}
+                  onChange={e => { setAllowAllIPs(e.target.checked); if (e.target.checked) setIpEntries([]); }}
+                  className="w-4 h-4 rounded border-gray-300 text-blue-600"
+                />
+                <span className="text-sm text-gray-700">Permitir cualquier IP</span>
+              </label>
+
+              {!allowAllIPs && (
+                <>
+                  <div className="flex gap-2 mb-2">
+                    <input
+                      value={ipInput}
+                      onChange={e => setIpInput(e.target.value)}
+                      onKeyDown={e => e.key === "Enter" && addIP()}
+                      className="input flex-1"
+                      placeholder="203.0.113.45 o 10.0.0.0/24"
+                      disabled={allowAllIPs}
+                    />
+                    <button onClick={addIP} className="btn-secondary px-3" disabled={!ipInput || allowAllIPs}>
+                      +
+                    </button>
+                  </div>
+
+                  {ipEntries.length > 0 && (
+                    <div className="space-y-1 max-h-32 overflow-y-auto mb-2">
+                      {ipEntries.map((e, i) => (
+                        <div key={i} className="flex items-center justify-between bg-blue-50 rounded px-3 py-2">
+                          <span className="font-mono text-sm text-blue-900">{e.cidr}</span>
+                          <button onClick={() => removeIP(i)} className="text-red-400 hover:text-red-600 text-sm">✕</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
 
             {error && <div className="text-sm text-red-600 bg-red-50 rounded p-2">{error}</div>}
@@ -363,154 +363,8 @@ function CreateTenantWizard({ onClose, onCreated }: {
             <div className="flex justify-end gap-3 pt-2">
               <button onClick={onClose} className="btn-secondary">Cancelar</button>
               <button
-                onClick={() => { setError(""); setStep("ip"); }}
-                disabled={!name}
-                className="btn-primary"
-              >
-                Siguiente →
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ── Paso 2: Restricción de IP ── */}
-        {step === "ip" && (
-          <div className="space-y-4">
-            <div>
-              <h3 className="text-sm font-semibold text-gray-800 mb-1">Restricción de IP</h3>
-              <p className="text-xs text-gray-500">
-                Si agregás IPs, solo esas direcciones podrán usar los sellos. Si no agregás ninguna, se permite cualquier IP.
-              </p>
-            </div>
-
-            <label className="flex items-center gap-3 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={allowAllIPs}
-                onChange={e => { setAllowAllIPs(e.target.checked); if (e.target.checked) setIpEntries([]); }}
-                className="w-4 h-4 rounded border-gray-300 text-blue-600"
-              />
-              <span className="text-sm text-gray-700">Sin restricción de IP (cualquier IP puede acceder)</span>
-            </label>
-
-            {!allowAllIPs && (
-              <>
-                <div className="flex gap-2">
-                  <input
-                    value={ipInput}
-                    onChange={e => setIpInput(e.target.value)}
-                    onKeyDown={e => e.key === "Enter" && addIP()}
-                    className="input flex-1"
-                    placeholder="203.0.113.45 o 10.0.0.0/24"
-                    disabled={allowAllIPs}
-                  />
-                  <input
-                    value={ipLabel}
-                    onChange={e => setIpLabel(e.target.value)}
-                    onKeyDown={e => e.key === "Enter" && addIP()}
-                    className="input w-36"
-                    placeholder="Etiqueta"
-                    disabled={allowAllIPs}
-                  />
-                  <button onClick={addIP} className="btn-secondary px-3" disabled={!ipInput || allowAllIPs}>
-                    +
-                  </button>
-                </div>
-
-                {ipEntries.length === 0 ? (
-                  <p className="text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded p-2">
-                    Sin IPs configuradas — se permitirá cualquier IP hasta que agregues una.
-                  </p>
-                ) : (
-                  <div className="space-y-1 max-h-40 overflow-y-auto">
-                    {ipEntries.map((e, i) => (
-                      <div key={i} className="flex items-center justify-between bg-gray-50 rounded px-3 py-2">
-                        <div>
-                          <span className="font-mono text-sm text-gray-800">{e.cidr}</span>
-                          {e.label && <span className="ml-2 text-xs text-gray-500">{e.label}</span>}
-                        </div>
-                        <button onClick={() => removeIP(i)} className="text-red-400 hover:text-red-600 text-xs">✕</button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-
-            <div className="flex justify-between gap-3 pt-2">
-              <button onClick={() => setStep("info")} className="btn-secondary">← Atrás</button>
-              <button onClick={() => setStep("quota")} className="btn-primary">Siguiente →</button>
-            </div>
-          </div>
-        )}
-
-        {/* ── Paso 3: Cuota ── */}
-        {step === "quota" && (
-          <div className="space-y-4">
-            <div>
-              <h3 className="text-sm font-semibold text-gray-800 mb-1">Cuota individual</h3>
-              <p className="text-xs text-gray-500">Límites de uso para este cliente.</p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="label">Límite mensual *</label>
-                <input
-                  value={monthly}
-                  onChange={e => setMonthly(e.target.value)}
-                  className="input"
-                  type="number"
-                  min="1"
-                />
-                <p className="text-xs text-gray-400 mt-1">sellos / mes</p>
-              </div>
-              <div>
-                <label className="label">Burst por minuto *</label>
-                <input
-                  value={burst}
-                  onChange={e => setBurst(e.target.value)}
-                  className="input"
-                  type="number"
-                  min="1"
-                />
-                <p className="text-xs text-gray-400 mt-1">requests / minuto</p>
-              </div>
-            </div>
-
-            <div className="space-y-3 pt-1">
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={hardLimit}
-                  onChange={e => setHardLimit(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-300 text-blue-600"
-                />
-                <div>
-                  <span className="text-sm font-medium text-gray-700">Límite estricto</span>
-                  <p className="text-xs text-gray-400">Rechaza requests al agotar la cuota mensual</p>
-                </div>
-              </label>
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={autoSuspend}
-                  onChange={e => setAutoSuspend(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-300 text-blue-600"
-                />
-                <div>
-                  <span className="text-sm font-medium text-gray-700">Suspender automáticamente</span>
-                  <p className="text-xs text-gray-400">Suspende el cliente al agotar la cuota</p>
-                </div>
-              </label>
-            </div>
-
-            {error && <div className="text-sm text-red-600 bg-red-50 rounded p-2">{error}</div>}
-
-            <div className="flex justify-between gap-3 pt-2">
-              <button onClick={() => setStep("ip")} className="btn-secondary" disabled={creating}>← Atrás</button>
-              <button
                 onClick={create}
-                disabled={!monthly || !burst || creating}
+                disabled={!name || creating}
                 className="btn-primary min-w-[120px]"
               >
                 {creating ? (
@@ -521,7 +375,7 @@ function CreateTenantWizard({ onClose, onCreated }: {
                     </svg>
                     Creando…
                   </span>
-                ) : "Crear cliente ✓"}
+                ) : "Crear cliente"}
               </button>
             </div>
           </div>

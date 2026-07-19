@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"os"
 
 	"github.com/google/uuid"
 
@@ -25,8 +26,15 @@ func NewService(repo *postgres.CredentialRepository, cache *rediscache.Cache) *S
 }
 
 // stampBaseURL es la base para construir las URLs de sello.
-// Se puede sobreescribir en tests o configuración.
-var stampBaseURL = "https://tsa.bigdavi.com"
+// Lee de la variable de entorno TSA_PUBLIC_URL, con fallback a producción.
+var stampBaseURL = getStampBaseURL()
+
+func getStampBaseURL() string {
+	if url := os.Getenv("TSA_PUBLIC_URL"); url != "" {
+		return url
+	}
+	return "https://tsa.bigdavi.com"
+}
 
 // Create genera un nuevo API key para el tenant.
 // El API key completo solo se devuelve en este momento.

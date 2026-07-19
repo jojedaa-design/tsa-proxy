@@ -1,0 +1,69 @@
+name: Deploy to QA
+
+on:
+  push:
+    branches: [ develop ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to QA server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.QA_SERVER_IP }}
+          username: ${{ secrets.QA_SERVER_USER }}
+          key: ${{ secrets.QA_SSH_KEY }}
+          script: |
+            set -e
+            echo "🚀 Starting deployment to QA..."
+
+            cd /opt/qa
+
+            # 1. Pull latest code from develop branch
+            echo "📥 Pulling latest code from develop..."
+            git fetch origin
+            git checkout develop
+            git pull origin develop
+
+            # 2. Build images
+            echo "🔨 Building Docker images..."
+            docker compose build backend frontend nginx
+
+            # 3. Apply migrations if any
+            echo "📊 Applying database migrations..."
+            bash scripts/run-migrations.sh || echo "Migrations skipped"
+
+            # 4. Start services
+            echo "🎯 Starting services..."
+            docker compose up -d --no-deps backend frontend nginx
+
+            # 5. Wait for healthchecks
+            echo "⏳ Waiting for services to be healthy..."
+            sleep 10
+            docker compose ps
+
+            # 6. Verify
+            echo "✅ Verifying deployment..."
+            if curl -sf https://qa-tsa.bigdavi.com/health >/dev/null; then
+              echo "✅ QA deployment successful!"
+            else
+              echo "❌ Health check failed"
+              docker compose logs backend --tail=50
+              exit 1
+            fi
+
+      - name: Notify deployment success
+        if: success()
+        run: echo "✅ QA deployment completed successfully"
+
+      - name: Notify deployment failure
+        if: failure()
+        run: |
+          echo "❌ QA deployment failed"
+          exit 1

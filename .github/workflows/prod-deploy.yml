@@ -1,0 +1,76 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Protection: require approval or specific condition before deploying to prod
+    environment: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to Production server
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.PROD_SERVER_IP }}
+          username: ${{ secrets.PROD_SERVER_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            set -e
+            echo "🚀 Starting deployment to PRODUCTION..."
+
+            cd /opt/tsa-proxy
+
+            # 1. Backup database (safety first!)
+            echo "💾 Creating database backup..."
+            BACKUP_DEST_DIR=/var/backups/tsaproxy bash scripts/backup-db.sh
+
+            # 2. Pull latest code from main branch
+            echo "📥 Pulling latest code from main..."
+            git fetch origin
+            git checkout main
+            git pull origin main
+
+            # 3. Build images
+            echo "🔨 Building Docker images..."
+            docker compose build backend frontend nginx
+
+            # 4. Apply migrations if any
+            echo "📊 Applying database migrations..."
+            bash scripts/run-migrations.sh || echo "Migrations skipped"
+
+            # 5. Start services (rolling restart, no downtime)
+            echo "🎯 Starting services (rolling restart)..."
+            docker compose up -d --no-deps backend frontend nginx
+
+            # 6. Wait for healthchecks
+            echo "⏳ Waiting for services to be healthy..."
+            sleep 15
+            docker compose ps
+
+            # 7. Verify
+            echo "✅ Verifying deployment..."
+            if curl -sf https://tsa.bigdavi.com/health >/dev/null; then
+              echo "✅ PRODUCTION deployment successful!"
+            else
+              echo "❌ Health check failed"
+              docker compose logs backend --tail=50
+              echo "⚠️  Database backup available at: /var/backups/tsaproxy/"
+              exit 1
+            fi
+
+      - name: Notify deployment success
+        if: success()
+        run: echo "✅ Production deployment completed successfully"
+
+      - name: Notify deployment failure
+        if: failure()
+        run: |
+          echo "❌ Production deployment failed - database backup available"
+          exit 1

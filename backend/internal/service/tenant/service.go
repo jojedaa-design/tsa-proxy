@@ -156,6 +156,37 @@ func (s *Service) Reactivate(ctx context.Context, id uuid.UUID, actorID uuid.UUI
 	return nil
 }
 
+func (s *Service) Delete(ctx context.Context, id uuid.UUID, actorID uuid.UUID) error {
+	tenant, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("get tenant: %w", err)
+	}
+	if tenant == nil {
+		return fmt.Errorf("tenant not found")
+	}
+
+	if err := s.repo.Delete(ctx, id); err != nil {
+		return fmt.Errorf("delete tenant: %w", err)
+	}
+
+	// Invalidar caches
+	_ = s.cache.InvalidateTenantStatus(ctx, id)
+	_ = s.cache.InvalidateIPAllowlist(ctx, id)
+
+	go func() {
+		_ = s.audit.Insert(context.Background(), &model.AuditEvent{
+			ActorID:    &actorID,
+			ActorType:  "admin",
+			Action:     "tenant.delete",
+			EntityType: "tenant",
+			EntityID:   &id,
+			Changes:    map[string]interface{}{"name": tenant.Name, "slug": tenant.Slug, "status": tenant.Status},
+		})
+	}()
+
+	return nil
+}
+
 func (s *Service) GetByID(ctx context.Context, id uuid.UUID) (*model.Tenant, error) {
 	return s.repo.GetByID(ctx, id)
 }

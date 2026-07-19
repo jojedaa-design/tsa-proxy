@@ -377,6 +377,10 @@ export const api = {
     return apiFetch(`/api/admin/v1/tenants/${id}/reactivate`, { method: "POST" });
   },
 
+  async deleteTenant(id: string) {
+    return apiFetch(`/api/admin/v1/tenants/${id}`, { method: "DELETE" });
+  },
+
   // Credentials
   async listCredentials(tenantId: string) {
     return apiFetch<{ data: APICredential[] }>(

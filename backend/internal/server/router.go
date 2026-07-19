@@ -132,6 +132,7 @@ func NewRouter(d *Deps) http.Handler {
 				r.Route("/{id}", func(r chi.Router) {
 					r.Get("/",   d.AdminTenants.Get)
 					r.Put("/",   d.AdminTenants.Update)
+					r.Delete("/", d.AdminTenants.Delete)
 					r.Post("/suspend",    d.AdminTenants.Suspend)
 					r.Post("/reactivate", d.AdminTenants.Reactivate)
 

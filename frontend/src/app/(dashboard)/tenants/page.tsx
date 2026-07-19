@@ -27,6 +27,11 @@ export default function TenantsPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["tenants"] }),
   });
 
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => api.deleteTenant(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["tenants"] }),
+  });
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
@@ -86,6 +91,7 @@ export default function TenantsPage() {
                   tenant={tenant}
                   onSuspend={() => suspendMut.mutate(tenant.id)}
                   onReactivate={() => reactivateMut.mutate(tenant.id)}
+                  onDelete={() => deleteMut.mutate(tenant.id)}
                 />
               ))}
             </tbody>
@@ -133,10 +139,11 @@ export default function TenantsPage() {
 
 // ── Tenant Row ────────────────────────────────────────────────
 
-function TenantRow({ tenant, onSuspend, onReactivate }: {
+function TenantRow({ tenant, onSuspend, onReactivate, onDelete }: {
   tenant: Tenant;
   onSuspend: () => void;
   onReactivate: () => void;
+  onDelete: () => void;
 }) {
   return (
     <tr className="hover:bg-gray-50">
@@ -188,6 +195,16 @@ function TenantRow({ tenant, onSuspend, onReactivate }: {
               Reactivar
             </button>
           ) : null}
+          <button
+            onClick={() => {
+              if (confirm(`⚠️ ¿Eliminar definitivamente el cliente "${tenant.name}"?\n\nEsta acción no se puede deshacer. Se eliminarán todas las credenciales y configuraciones asociadas.`)) {
+                onDelete();
+              }
+            }}
+            className="btn px-3 py-1 text-xs bg-red-50 text-red-700 border border-red-200 hover:bg-red-100"
+          >
+            Eliminar
+          </button>
         </div>
       </td>
     </tr>

@@ -190,6 +190,23 @@ func (h *TenantsHandler) Reactivate(w http.ResponseWriter, r *http.Request) {
 	apierr.WriteJSON(w, http.StatusOK, map[string]string{"status": "active"})
 }
 
+// Delete — DELETE /api/admin/v1/tenants/:id
+func (h *TenantsHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		apierr.WriteError(w, r, apierr.ErrBadRequest)
+		return
+	}
+
+	actorID, _ := middleware.GetAdminUserID(r.Context())
+	if err := h.svc.Delete(r.Context(), id, actorID); err != nil {
+		apierr.WriteError(w, r, apierr.ErrInternal)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func isConflict(err error) bool {
 	return err != nil && (contains(err.Error(), "already exists") || contains(err.Error(), "duplicate"))
 }

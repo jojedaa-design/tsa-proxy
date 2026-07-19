@@ -339,13 +339,13 @@ export default function TenantDetailPage() {
                     <td className="px-4 py-3 font-mono text-xs text-gray-600">{c.key_prefix}</td>
                     <td className="px-4 py-3 text-gray-700">{c.name ?? <span className="text-gray-400">Sin nombre</span>}</td>
                     <td className="px-4 py-3">
-                      {c.url_token && c.status === "active" ? (
+                      {c.url_token && c.status === "active" && creds?.tsa_endpoint ? (
                         <div className="flex items-center gap-1">
-                          <span className="font-mono text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded px-2 py-1 max-w-[180px] truncate" title={`https://tsa.bigdavi.com/ts/${c.url_token}`}>
+                          <span className="font-mono text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded px-2 py-1 max-w-[180px] truncate" title={`${creds.tsa_endpoint}/${c.url_token}`}>
                             /ts/{c.url_token.slice(0,8)}…
                           </span>
                           <button
-                            onClick={() => navigator.clipboard.writeText(`https://tsa.bigdavi.com/ts/${c.url_token}`)}
+                            onClick={() => navigator.clipboard.writeText(`${creds.tsa_endpoint}/${c.url_token}`)}
                             title="Copiar URL de firma"
                             className="text-blue-400 hover:text-blue-600"
                           >
@@ -397,7 +397,7 @@ export default function TenantDetailPage() {
         <div className="space-y-4">
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
             <strong>Acceso TSA Privado con HTTP Basic Auth</strong><br />
-            Cada cliente obtiene su propio usuario y contraseña para la URL <code className="bg-blue-100 px-1 rounded">POST https://tsa.bigdavi.com/ts</code>.
+            Cada cliente obtiene su propio usuario y contraseña para la URL <code className="bg-blue-100 px-1 rounded">POST {basicAuths?.tsa_endpoint || "https://tsa.bigdavi.com/ts"}</code>.
             Compatible con Adobe Reader, DAVISIGN y JSignPdf.
           </div>
 
@@ -528,7 +528,7 @@ export default function TenantDetailPage() {
             <p className="font-semibold mb-1">Acceso TSP sin credenciales (por IP)</p>
             <p>
               Permite que clientes como <strong>DAVISIGN</strong> con EU DSS envíen requests al endpoint{" "}
-              <code className="bg-amber-100 px-1 rounded font-mono">POST https://tsa.bigdavi.com/tsp</code> sin
+              <code className="bg-amber-100 px-1 rounded font-mono">POST {basicAuths?.tsa_endpoint?.replace("/ts", "/tsp") || "https://tsa.bigdavi.com/tsp"}</code> sin
               usuario ni contraseña. La autenticación se realiza validando la <strong>IP de origen</strong> contra
               el IP Allowlist del cliente.
             </p>
@@ -588,10 +588,10 @@ export default function TenantDetailPage() {
                   </p>
                   <div className="flex items-center gap-2">
                     <div className="flex-1 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 font-mono text-sm text-blue-800">
-                      https://tsa.bigdavi.com/tsp
+                      {basicAuths?.tsa_endpoint?.replace("/ts", "/tsp") || "https://tsa.bigdavi.com/tsp"}
                     </div>
                     <button
-                      onClick={() => navigator.clipboard.writeText("https://tsa.bigdavi.com/tsp")}
+                      onClick={() => navigator.clipboard.writeText(basicAuths?.tsa_endpoint?.replace("/ts", "/tsp") || "https://tsa.bigdavi.com/tsp")}
                       className="px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
                     >
                       Copiar
@@ -619,7 +619,7 @@ export default function TenantDetailPage() {
               <h3 className="text-base font-semibold text-gray-900 mb-1">Habilitar acceso TSP sin credenciales</h3>
               <p className="text-sm text-gray-500 mb-4">
                 Una vez habilitado, el cliente podrá enviar requests a{" "}
-                <code className="font-mono text-xs bg-gray-100 px-1 rounded">https://tsa.bigdavi.com/tsp</code>{" "}
+                <code className="font-mono text-xs bg-gray-100 px-1 rounded">{basicAuths?.tsa_endpoint?.replace("/ts", "/tsp") || "https://tsa.bigdavi.com/tsp"}</code>{" "}
                 sin usuario ni contraseña. Deberás agregar su IP en el Allowlist para que funcione.
               </p>
               <div className="flex gap-3">

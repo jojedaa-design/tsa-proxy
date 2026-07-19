@@ -174,3 +174,8 @@ func (r *TenantRepository) SoftDelete(ctx context.Context, id uuid.UUID) error {
 	`, id)
 	return err
 }
+
+func (r *TenantRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	_, err := r.pool.Exec(ctx, `DELETE FROM tenants WHERE id=$1`, id)
+	return err
+}

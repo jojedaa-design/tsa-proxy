@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 
 	"github.com/bigdavi/tsa-proxy/internal/apierr"
 	"github.com/bigdavi/tsa-proxy/internal/model"
@@ -63,6 +64,16 @@ func (m *TSPAuthMiddleware) Authenticate(next http.Handler) http.Handler {
 		}
 
 		authHeader := r.Header.Get("Authorization")
+		authPrefix := authHeader
+		if len(authPrefix) > 10 {
+			authPrefix = authPrefix[:10]
+		}
+		log.Warn().
+			Str("method", r.Method).
+			Bool("has_auth_header", authHeader != "").
+			Bool("is_basic", strings.HasPrefix(authHeader, "Basic ")).
+			Str("auth_prefix", authPrefix).
+			Msg("tsp_auth: request received")
 
 		var tenantID uuid.UUID
 		var credentialID uuid.UUID
@@ -70,12 +81,14 @@ func (m *TSPAuthMiddleware) Authenticate(next http.Handler) http.Handler {
 		// Para GET sin Authorization: retorna 401 + WWW-Authenticate
 		// (permite que clientes como DAVISIGN detecten que necesitan credenciales)
 		if r.Method == "GET" && (authHeader == "" || !strings.HasPrefix(authHeader, "Basic ")) {
+			log.Warn().Msg("tsp_auth: GET without Basic auth, returning 401")
 			w.Header().Set("WWW-Authenticate", `Basic realm="TSA Proxy"`)
 			apierr.WriteError(w, r, apierr.ErrUnauthorized)
 			return
 		}
 
 		if authHeader != "" && strings.HasPrefix(authHeader, "Basic ") {
+			log.Warn().Msg("tsp_auth: processing Basic auth")
 			// ── Flujo 1: Basic Auth ──────────────────────────────
 			decoded, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(authHeader, "Basic "))
 			if err != nil {

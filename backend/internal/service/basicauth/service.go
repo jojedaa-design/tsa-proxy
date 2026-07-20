@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"os"
 
 	"github.com/google/uuid"
 
@@ -23,7 +24,14 @@ func NewService(repo *postgres.BasicAuthRepository, cache *rediscache.Cache) *Se
 }
 
 // stampBaseURL para BasicAuth es la misma URL base
-var stampBaseURL = "https://tsa.bigdavi.com"
+var stampBaseURL = getStampBaseURL()
+
+func getStampBaseURL() string {
+	if url := os.Getenv("TSA_PUBLIC_URL"); url != "" {
+		return url
+	}
+	return "https://tsa.bigdavi.com"
+}
 
 // Create genera nuevas credenciales Basic Auth para un tenant.
 // La contraseña se genera aleatoriamente (16 bytes hex) y solo se muestra una vez.

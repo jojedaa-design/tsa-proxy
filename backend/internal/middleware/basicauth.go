@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 
 	"github.com/bigdavi/tsa-proxy/internal/apierr"
 	"github.com/bigdavi/tsa-proxy/internal/model"
@@ -35,6 +36,7 @@ func (m *BasicAuthMiddleware) Authenticate(next http.Handler) http.Handler {
 		// Extraer credenciales Basic Auth
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" || !strings.HasPrefix(authHeader, "Basic ") {
+			log.Warn().Bool("header_empty", authHeader == "").Msg("basicauth: missing or non-Basic Authorization header")
 			w.Header().Set("WWW-Authenticate", `Basic realm="TSA Proxy"`)
 			apierr.WriteError(w, r, apierr.ErrUnauthorized)
 			return
@@ -42,12 +44,14 @@ func (m *BasicAuthMiddleware) Authenticate(next http.Handler) http.Handler {
 
 		decoded, err := base64.StdEncoding.DecodeString(strings.TrimPrefix(authHeader, "Basic "))
 		if err != nil {
+			log.Warn().Err(err).Msg("basicauth: base64 decode failed")
 			apierr.WriteError(w, r, apierr.ErrUnauthorized)
 			return
 		}
 
 		parts := strings.SplitN(string(decoded), ":", 2)
 		if len(parts) != 2 {
+			log.Warn().Msg("basicauth: malformed credentials (no colon)")
 			apierr.WriteError(w, r, apierr.ErrUnauthorized)
 			return
 		}
@@ -71,10 +75,12 @@ func (m *BasicAuthMiddleware) Authenticate(next http.Handler) http.Handler {
 		if cacheErr == nil && cached != nil {
 			// Verificar estado del cache
 			if cached.CredStatus != "active" {
+				log.Warn().Str("username", username).Str("status", cached.CredStatus).Msg("basicauth: credential not active (cache)")
 				apierr.WriteError(w, r, apierr.ErrUnauthorized)
 				return
 			}
 			if cached.TenantStatus == string(model.TenantStatusSuspended) || cached.TenantStatus == string(model.TenantStatusDeleted) {
+				log.Warn().Str("username", username).Str("tenant_status", cached.TenantStatus).Msg("basicauth: tenant suspended/deleted (cache)")
 				apierr.WriteError(w, r, apierr.ErrTenantSuspended)
 				return
 			}
@@ -82,12 +88,14 @@ func (m *BasicAuthMiddleware) Authenticate(next http.Handler) http.Handler {
 			expectedHashHex := cached.KeyHash
 			inputHashHex := fmt.Sprintf("%x", inputHash)
 			if expectedHashHex != inputHashHex {
+				log.Warn().Str("username", username).Int("password_len", len(password)).Msg("basicauth: password mismatch (cache)")
 				apierr.WriteError(w, r, apierr.ErrUnauthorized)
 				return
 			}
 			// Parsear UUIDs
 			tid, err1 := uuid.Parse(cached.TenantID)
 			if err1 != nil {
+				log.Warn().Str("username", username).Err(err1).Msg("basicauth: invalid tenant id (cache)")
 				apierr.WriteError(w, r, apierr.ErrUnauthorized)
 				return
 			}
@@ -96,19 +104,23 @@ func (m *BasicAuthMiddleware) Authenticate(next http.Handler) http.Handler {
 			// Cache miss: buscar en Postgres
 			cred, tenant, err := m.repo.FindByUsername(ctx, username)
 			if err != nil || cred == nil {
+				log.Warn().Str("username", username).Err(err).Bool("not_found", cred == nil).Msg("basicauth: credential lookup failed")
 				apierr.WriteError(w, r, apierr.ErrUnauthorized)
 				return
 			}
 			if cred.Status != model.CredentialStatusActive {
+				log.Warn().Str("username", username).Str("status", string(cred.Status)).Msg("basicauth: credential not active (db)")
 				apierr.WriteError(w, r, apierr.ErrUnauthorized)
 				return
 			}
 			if tenant.Status == model.TenantStatusSuspended || tenant.Status == model.TenantStatusDeleted {
+				log.Warn().Str("username", username).Str("tenant_status", string(tenant.Status)).Msg("basicauth: tenant suspended/deleted (db)")
 				apierr.WriteError(w, r, apierr.ErrTenantSuspended)
 				return
 			}
 			// Comparar hash
 			if !bytes.Equal(cred.KeyHash, inputHash[:]) {
+				log.Warn().Str("username", username).Int("password_len", len(password)).Msg("basicauth: password mismatch (db)")
 				apierr.WriteError(w, r, apierr.ErrUnauthorized)
 				return
 			}

@@ -15,6 +15,7 @@ export default function TenantsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["tenants", page, search, status],
     queryFn: () => api.listTenants({ page, limit: 20, search, status }),
+    refetchInterval: 4000,
   });
 
   const suspendMut = useMutation({

@@ -47,31 +47,37 @@ export default function ReportsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["usage-report", from, to, tenantId],
     queryFn: () => api.getUsage({ from, to, tenant_id: tenantId || undefined }),
+    refetchInterval: 4000,
   });
 
   const { data: tenants } = useQuery({
     queryKey: ["tenants-simple"],
     queryFn: () => api.listTenants({ limit: 200 }),
+    refetchInterval: 4000,
   });
 
   const { data: ipsData, isLoading: ipsLoading } = useQuery({
     queryKey: ["top-ips", from, to],
     queryFn: () => api.getTopIPs({ from, to }),
+    refetchInterval: 4000,
   });
 
   const { data: agentsData, isLoading: agentsLoading } = useQuery({
     queryKey: ["top-user-agents", from, to],
     queryFn: () => api.getTopUserAgents({ from, to }),
+    refetchInterval: 4000,
   });
 
   const { data: countriesData, isLoading: countriesLoading } = useQuery({
     queryKey: ["top-countries", from, to],
     queryFn: () => api.getTopCountries({ from, to }),
+    refetchInterval: 4000,
   });
 
   const { data: failuresData, isLoading: failuresLoading } = useQuery({
     queryKey: ["failures", from, to, tenantId],
     queryFn: () => api.getFailureBreakdown({ from, to, tenant_id: tenantId || undefined }),
+    refetchInterval: 4000,
   });
 
   function downloadCSV() {

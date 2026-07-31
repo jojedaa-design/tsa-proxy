@@ -26,36 +26,42 @@ export default function TenantDetailPage() {
   const { data: tenant, isLoading } = useQuery({
     queryKey: ["tenant", id],
     queryFn: () => api.getTenant(id),
+    refetchInterval: 4000,
   });
 
   const { data: creds } = useQuery({
     queryKey: ["credentials", id],
     queryFn: () => api.listCredentials(id),
     enabled: tab === "credentials",
+    refetchInterval: 4000,
   });
 
   const { data: ips } = useQuery({
     queryKey: ["ip-allowlist", id],
     queryFn: () => api.listIPAllowlist(id),
     enabled: tab === "ip-allowlist",
+    refetchInterval: 4000,
   });
 
   const { data: quota } = useQuery({
     queryKey: ["quota", id],
     queryFn: () => api.getQuota(id),
     enabled: tab === "quota",
+    refetchInterval: 4000,
   });
 
   const { data: basicAuths } = useQuery({
     queryKey: ["basic-auth", id],
     queryFn: () => api.listBasicAuth(id),
     enabled: tab === "basic-auth",
+    refetchInterval: 4000,
   });
 
   const { data: noauthData, isLoading: noauthLoading } = useQuery({
     queryKey: ["noauth", id],
     queryFn: () => api.getNoAuth(id),
     enabled: tab === "noauth",
+    refetchInterval: 4000,
   });
 
   const createCredMut = useMutation({

@@ -24,7 +24,7 @@ export default function DashboardPage() {
   const { data: summary, isLoading, error } = useQuery<DashboardSummary>({
     queryKey: ["dashboard-summary"],
     queryFn: () => api.getUsageSummary(),
-    refetchInterval: 60_000,
+    refetchInterval: 4000,
   });
 
   // Failure breakdown para las últimas 24h
@@ -33,7 +33,7 @@ export default function DashboardPage() {
   const { data: failures } = useQuery({
     queryKey: ["failures-24h"],
     queryFn: () => api.getFailureBreakdown({ from: yesterday, to: today }),
-    refetchInterval: 60_000,
+    refetchInterval: 4000,
   });
 
   const allFailures = [
@@ -178,7 +178,7 @@ function SystemStatus() {
       const res = await fetch("/ready");
       return res.json();
     },
-    refetchInterval: 30_000,
+    refetchInterval: 4000,
   });
 
   const items = [

@@ -26,6 +26,7 @@ export default function AuditPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["audit-events", page, action, from, to],
     queryFn: () => api.listAuditEvents({ page, action, from: from || undefined, to: to || undefined }),
+    refetchInterval: 4000,
   });
 
   return (

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import QRCode from "qrcode";
-import { api, type TSAUpstream } from "@/lib/api";
+import { api, type TSAUpstream, type PlatformUser, type Role } from "@/lib/api";
 
 export default function ConfigPage() {
   const qc = useQueryClient();
@@ -64,6 +64,9 @@ export default function ConfigPage() {
 
       {/* Seguridad — 2FA */}
       <TwoFactorSection />
+
+      {/* Usuarios de la plataforma */}
+      <UsersSection />
 
       {showCreate && (
         <UpstreamModal
@@ -517,6 +520,297 @@ function UpstreamModal({
             className="btn-primary"
           >
             {saveMut.isPending ? "Guardando..." : upstreamId ? "Actualizar" : "Crear"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Sección de Usuarios de la Plataforma ────────────────────── */
+
+const ROLE_LABELS: Record<string, string> = {
+  superadmin: "Superadmin",
+  admin: "Admin",
+  viewer: "Solo lectura",
+};
+
+const ROLE_BADGES: Record<string, string> = {
+  superadmin: "badge-blue",
+  admin: "badge-green",
+  viewer: "badge-gray",
+};
+
+function UsersSection() {
+  const qc = useQueryClient();
+  const [showCreate, setShowCreate] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["platform-users"],
+    queryFn: () => api.listUsers({ limit: 100 }),
+    refetchInterval: 4000,
+  });
+
+  const users = data?.data ?? [];
+
+  const deleteMut = useMutation({
+    mutationFn: (id: string) => api.deleteUser(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["platform-users"] }),
+  });
+
+  return (
+    <div className="card p-6">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">Usuarios de la Plataforma</h2>
+          <p className="text-sm text-gray-500">
+            Administradores y usuarios de solo lectura del panel
+          </p>
+        </div>
+        <button
+          onClick={() => { setEditingId(null); setShowCreate(true); }}
+          className="btn-primary text-sm"
+        >
+          + Nuevo Usuario
+        </button>
+      </div>
+
+      {isLoading ? (
+        <p className="text-center text-gray-400 py-8">Cargando...</p>
+      ) : users.length === 0 ? (
+        <p className="text-center text-gray-400 py-8">No hay usuarios todavía.</p>
+      ) : (
+        <div className="space-y-3">
+          {users.map((u) => (
+            <div key={u.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-gray-900">{u.username}</h3>
+                    <span className={`badge ${ROLE_BADGES[u.role] ?? "badge-gray"} text-xs`}>
+                      {ROLE_LABELS[u.role] ?? u.role}
+                    </span>
+                    {!u.is_active && <span className="badge badge-gray text-xs">Inactivo</span>}
+                  </div>
+                  <p className="text-sm text-gray-600 mt-1">{u.email}</p>
+                  {u.role === "viewer" && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      Acceso a: {u.tenant_scope.length === 0 ? "todos los clientes" : `${u.tenant_scope.length} cliente(s)`}
+                    </p>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setEditingId(u.id); setShowCreate(true); }}
+                    className="btn-secondary text-xs px-3 py-1"
+                  >
+                    Editar
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (confirm(`¿Eliminar al usuario ${u.username}?`)) deleteMut.mutate(u.id);
+                    }}
+                    disabled={deleteMut.isPending}
+                    className="btn px-3 py-1 text-xs bg-red-50 text-red-700 border border-red-200 hover:bg-red-100"
+                  >
+                    Eliminar
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showCreate && (
+        <UserModal
+          userId={editingId}
+          onClose={() => { setShowCreate(false); setEditingId(null); }}
+          onSuccess={() => {
+            setShowCreate(false);
+            setEditingId(null);
+            qc.invalidateQueries({ queryKey: ["platform-users"] });
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function UserModal({
+  userId,
+  onClose,
+  onSuccess,
+}: {
+  userId: string | null;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isActive, setIsActive] = useState(true);
+  const [role, setRole] = useState("viewer");
+  const [allTenants, setAllTenants] = useState(true);
+  const [selectedTenants, setSelectedTenants] = useState<string[]>([]);
+  const [error, setError] = useState("");
+
+  const { data: rolesData } = useQuery({
+    queryKey: ["roles"],
+    queryFn: () => api.listRoles().then((res) => res.data),
+  });
+
+  const { data: tenantsData } = useQuery({
+    queryKey: ["tenants-simple"],
+    queryFn: () => api.listTenants({ limit: 200 }),
+  });
+
+  const { data: existing } = useQuery({
+    queryKey: ["platform-user", userId],
+    queryFn: () => userId ? api.listUsers({ limit: 100 }).then((res) => res.data.find((u) => u.id === userId)) : null,
+    enabled: !!userId,
+  });
+
+  useEffect(() => {
+    if (existing) {
+      setUsername(existing.username);
+      setEmail(existing.email);
+      setIsActive(existing.is_active);
+      setRole(existing.role);
+      setAllTenants(existing.tenant_scope.length === 0);
+      setSelectedTenants(existing.tenant_scope);
+    }
+  }, [existing]);
+
+  const saveMut = useMutation({
+    mutationFn: () => {
+      const tenantIds = role === "viewer" && !allTenants ? selectedTenants : [];
+      if (userId) {
+        return api.updateUser(userId, { email, is_active: isActive, role, tenant_ids: tenantIds });
+      }
+      return api.createUser({ username, email, password, role, tenant_ids: tenantIds });
+    },
+    onSuccess,
+    onError: (err: any) => {
+      setError(err.message || err.error || "Error al guardar");
+    },
+  });
+
+  function toggleTenant(id: string) {
+    setSelectedTenants((prev) =>
+      prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="card w-full max-w-md p-6 mx-4 max-h-[90vh] overflow-y-auto">
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+          {userId ? "Editar Usuario" : "Nuevo Usuario"}
+        </h2>
+
+        <div className="space-y-4">
+          <div>
+            <label className="label">Usuario *</label>
+            <input
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="input"
+              placeholder="jperez"
+              disabled={!!userId}
+              autoComplete="off"
+            />
+          </div>
+
+          <div>
+            <label className="label">Email *</label>
+            <input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="input"
+              type="email"
+              placeholder="usuario@empresa.com"
+            />
+          </div>
+
+          {!userId && (
+            <div>
+              <label className="label">Contraseña *</label>
+              <input
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="input"
+                type="password"
+                placeholder="Mínimo 8 caracteres"
+                autoComplete="new-password"
+              />
+            </div>
+          )}
+
+          {userId && (
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
+              Usuario activo
+            </label>
+          )}
+
+          <div>
+            <label className="label">Rol *</label>
+            <select value={role} onChange={(e) => setRole(e.target.value)} className="input">
+              {(rolesData ?? []).map((r: Role) => (
+                <option key={r.id} value={r.name}>{ROLE_LABELS[r.name] ?? r.name}</option>
+              ))}
+            </select>
+            {role !== "viewer" && (
+              <p className="text-xs text-gray-400 mt-1">Acceso completo al panel de administración.</p>
+            )}
+          </div>
+
+          {role === "viewer" && (
+            <div className="border-t border-gray-100 pt-4">
+              <label className="flex items-center gap-2 text-sm text-gray-700 mb-3">
+                <input
+                  type="checkbox"
+                  checked={allTenants}
+                  onChange={(e) => setAllTenants(e.target.checked)}
+                />
+                Acceso a todos los clientes
+              </label>
+              {!allTenants && (
+                <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-md p-2 space-y-1">
+                  {(tenantsData?.data ?? []).map((t) => (
+                    <label key={t.id} className="flex items-center gap-2 text-sm text-gray-700 py-1">
+                      <input
+                        type="checkbox"
+                        checked={selectedTenants.includes(t.id)}
+                        onChange={() => toggleTenant(t.id)}
+                      />
+                      {t.name}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {error && <div className="text-sm text-red-600 bg-red-50 rounded p-2">{error}</div>}
+        </div>
+
+        <div className="flex justify-end gap-3 mt-6">
+          <button onClick={onClose} className="btn-secondary">
+            Cancelar
+          </button>
+          <button
+            onClick={() => saveMut.mutate()}
+            disabled={
+              !email ||
+              (!userId && (!username || password.length < 8)) ||
+              saveMut.isPending
+            }
+            className="btn-primary"
+          >
+            {saveMut.isPending ? "Guardando..." : userId ? "Actualizar" : "Crear"}
           </button>
         </div>
       </div>

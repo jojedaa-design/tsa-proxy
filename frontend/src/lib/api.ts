@@ -183,9 +183,27 @@ export interface AuditEvent {
 export interface LoginResponse {
   access_token?: string;
   expires_in?: number;
-  user?: { id: string; username: string; email: string; roles: string[] };
+  user?: { id: string; username: string; email: string; roles: string[]; tenant_scope?: string[] };
   mfa_required?: boolean;
   mfa_token?: string;
+}
+
+export interface PlatformUser {
+  id: string;
+  username: string;
+  email: string;
+  is_active: boolean;
+  totp_enabled: boolean;
+  role: string;
+  tenant_scope: string[]; // vacío = todos los tenants
+  created_at: string;
+  last_login_at?: string;
+}
+
+export interface Role {
+  id: string;
+  name: string;
+  description?: string;
 }
 
 export interface TOTP2FASetup {
@@ -334,9 +352,9 @@ export const api = {
   },
 
   async me() {
-    return apiFetch<{ id: string; username: string; email: string; roles: string[] }>(
-      "/api/admin/v1/auth/me"
-    );
+    return apiFetch<{
+      id: string; username: string; email: string; roles: string[]; tenant_scope?: string[];
+    }>("/api/admin/v1/auth/me");
   },
 
   // Tenants
@@ -580,5 +598,45 @@ export const api = {
 
   async deleteNoAuth(tenantId: string) {
     return apiFetch(`/api/admin/v1/tenants/${tenantId}/noauth`, { method: "DELETE" });
+  },
+
+  // Usuarios de la plataforma
+  async listUsers(params: { page?: number; limit?: number; search?: string } = {}) {
+    const q = new URLSearchParams();
+    if (params.page)   q.set("page",   String(params.page));
+    if (params.limit)  q.set("limit",  String(params.limit));
+    if (params.search) q.set("search", params.search);
+    return apiFetch<{ data: PlatformUser[]; pagination: Pagination }>(
+      `/api/admin/v1/users?${q}`
+    );
+  },
+
+  async createUser(data: { username: string; email: string; password: string; role: string; tenant_ids?: string[] }) {
+    return apiFetch<PlatformUser>("/api/admin/v1/users", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async updateUser(id: string, data: { email: string; is_active: boolean; role: string; tenant_ids?: string[] }) {
+    return apiFetch<PlatformUser>(`/api/admin/v1/users/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async deleteUser(id: string) {
+    return apiFetch(`/api/admin/v1/users/${id}`, { method: "DELETE" });
+  },
+
+  async resetUserPassword(id: string, password: string) {
+    return apiFetch(`/api/admin/v1/users/${id}/reset-password`, {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    });
+  },
+
+  async listRoles() {
+    return apiFetch<{ data: Role[] }>("/api/admin/v1/roles");
   },
 };

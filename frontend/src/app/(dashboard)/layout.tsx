@@ -17,6 +17,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const pathname = usePathname();
   const [username, setUsername] = useState("");
+  const [role, setRole] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
@@ -24,10 +25,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       router.push("/login");
       return;
     }
-    api.me().then((user) => setUsername(user.username)).catch(() => {
+    api.me().then((user) => {
+      setUsername(user.username);
+      setRole(user.roles?.[0] ?? null);
+    }).catch(() => {
       router.push("/login");
     });
   }, [router]);
+
+  // El rol "viewer" solo puede ver Dashboard, Reportes y Auditoría.
+  const isViewer = role === "viewer";
+
+  useEffect(() => {
+    if (isViewer && (pathname.startsWith("/tenants") || pathname.startsWith("/config"))) {
+      router.push("/");
+    }
+  }, [isViewer, pathname, router]);
+
+  const visibleNavItems = isViewer
+    ? navItems.filter((item) => item.href !== "/tenants" && item.href !== "/config")
+    : navItems;
 
   async function handleLogout() {
     await api.logout();
@@ -60,7 +77,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         {/* Nav */}
         <nav className="mt-6 px-3">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const active = item.href === "/"
               ? pathname === "/"
               : pathname.startsWith(item.href);

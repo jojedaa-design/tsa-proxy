@@ -128,8 +128,8 @@ func (r *AdminUserRepository) UpdateTOTP(ctx context.Context, userID uuid.UUID, 
 func (r *AdminUserRepository) GetRoleByName(ctx context.Context, name string) (*model.Role, error) {
 	role := &model.Role{}
 	err := r.pool.QueryRow(ctx, `
-		SELECT id, name, description, created_at FROM roles WHERE name=$1
-	`, name).Scan(&role.ID, &role.Name, &role.Description, &role.CreatedAt)
+		SELECT id, name, description FROM roles WHERE name=$1
+	`, name).Scan(&role.ID, &role.Name, &role.Description)
 	if err == pgx.ErrNoRows {
 		return nil, nil
 	}
@@ -139,7 +139,7 @@ func (r *AdminUserRepository) GetRoleByName(ctx context.Context, name string) (*
 // ListRoles devuelve todos los roles disponibles (para el selector del formulario).
 func (r *AdminUserRepository) ListRoles(ctx context.Context) ([]*model.Role, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, name, description, created_at FROM roles ORDER BY name
+		SELECT id, name, description FROM roles ORDER BY name
 	`)
 	if err != nil {
 		return nil, err
@@ -149,7 +149,7 @@ func (r *AdminUserRepository) ListRoles(ctx context.Context) ([]*model.Role, err
 	roles := make([]*model.Role, 0)
 	for rows.Next() {
 		role := &model.Role{}
-		if err := rows.Scan(&role.ID, &role.Name, &role.Description, &role.CreatedAt); err != nil {
+		if err := rows.Scan(&role.ID, &role.Name, &role.Description); err != nil {
 			return nil, err
 		}
 		roles = append(roles, role)

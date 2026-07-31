@@ -61,8 +61,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
       `}>
         {/* Logo */}
-        <div className="h-16 flex items-center px-6 border-b border-white/10">
-          <Image src="/brand/logo-white.svg" alt="BIGDAVI" width={140} height={64} className="h-8 w-auto" priority unoptimized />
+        <div className="flex items-center justify-center px-6 py-6 border-b border-white/10">
+          <Image src="/brand/logo-white.svg" alt="BIGDAVI" width={280} height={129} className="w-full h-auto" priority unoptimized />
         </div>
 
         {/* Nav */}

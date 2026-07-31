@@ -70,7 +70,7 @@ export default function DashboardPage() {
           title="Clientes activos"
           value={summary?.active_tenants ?? 0}
           sub="tenants con status activo"
-          color="text-blue-600"
+          color="text-primary-600"
         />
         <StatCard
           title="Sellos hoy"
@@ -115,7 +115,7 @@ export default function DashboardPage() {
                     </div>
                     <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-blue-500 rounded-full"
+                        className="h-full bg-primary-500 rounded-full"
                         style={{ width: `${pct}%` }}
                       />
                     </div>

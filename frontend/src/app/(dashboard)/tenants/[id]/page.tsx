@@ -168,7 +168,7 @@ export default function TenantDetailPage() {
               onClick={() => setTab(t)}
               className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
                 tab === t
-                  ? "border-blue-500 text-blue-600"
+                  ? "border-primary-500 text-primary-600"
                   : "border-transparent text-gray-500 hover:text-gray-700"
               }`}
             >
@@ -219,18 +219,18 @@ export default function TenantDetailPage() {
             {/* URL de firma */}
             {showStampURL && (
               <div className="mt-4">
-                <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide mb-1">
+                <p className="text-xs font-semibold text-primary-700 uppercase tracking-wide mb-1">
                   🖊 URL para software de firma (DAVISIGN, Adobe, JSignPdf, etc.)
                 </p>
                 <p className="text-xs text-gray-500 mb-2">
                   Configura esta URL en el campo "URL de la TSA". No necesitas usuario ni contraseña.
                 </p>
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 font-mono text-xs text-blue-800 break-all">
+                <div className="bg-primary-50 border border-primary-200 rounded-lg p-3 font-mono text-xs text-primary-800 break-all">
                   {showStampURL}
                 </div>
                 <button
                   onClick={() => { navigator.clipboard.writeText(showStampURL); }}
-                  className="w-full mt-2 px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                  className="w-full mt-2 px-3 py-2 text-sm bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors"
                 >
                   Copiar URL de firma
                 </button>
@@ -266,12 +266,12 @@ export default function TenantDetailPage() {
             <div className="space-y-3">
               <div>
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">URL del endpoint TSA</p>
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 font-mono text-xs text-blue-800 break-all">
+                <div className="bg-primary-50 border border-primary-200 rounded-lg p-3 font-mono text-xs text-primary-800 break-all">
                   {showNewBAResult.tsa_endpoint}
                 </div>
                 <button
                   onClick={() => { if (showNewBAResult.tsa_endpoint) navigator.clipboard.writeText(showNewBAResult.tsa_endpoint!); }}
-                  className="w-full mt-2 px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                  className="w-full mt-2 px-3 py-2 text-sm bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors"
                 >
                   Copiar URL
                 </button>
@@ -347,13 +347,13 @@ export default function TenantDetailPage() {
                     <td className="px-4 py-3">
                       {c.url_token && c.status === "active" && creds?.tsa_endpoint ? (
                         <div className="flex items-center gap-1">
-                          <span className="font-mono text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded px-2 py-1 max-w-[180px] truncate" title={`${creds.tsa_endpoint}/${c.url_token}`}>
+                          <span className="font-mono text-xs text-primary-700 bg-primary-50 border border-primary-100 rounded px-2 py-1 max-w-[180px] truncate" title={`${creds.tsa_endpoint}/${c.url_token}`}>
                             /ts/{c.url_token.slice(0,8)}…
                           </span>
                           <button
                             onClick={() => navigator.clipboard.writeText(`${creds.tsa_endpoint}/${c.url_token}`)}
                             title="Copiar URL de firma"
-                            className="text-blue-400 hover:text-blue-600"
+                            className="text-primary-400 hover:text-primary-600"
                           >
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -401,9 +401,9 @@ export default function TenantDetailPage() {
       {/* Tab: Acceso TSA Privado (Basic Auth) */}
       {tab === "basic-auth" && (
         <div className="space-y-4">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
+          <div className="bg-primary-50 border border-primary-200 rounded-lg p-4 text-sm text-primary-800">
             <strong>Acceso TSA Privado con HTTP Basic Auth</strong><br />
-            Cada cliente obtiene su propio usuario y contraseña para la URL <code className="bg-blue-100 px-1 rounded">POST {basicAuths?.tsa_endpoint || "https://tsa.bigdavi.com/ts"}</code>.
+            Cada cliente obtiene su propio usuario y contraseña para la URL <code className="bg-primary-100 px-1 rounded">POST {basicAuths?.tsa_endpoint || "https://tsa.bigdavi.com/ts"}</code>.
             Compatible con Adobe Reader, DAVISIGN y JSignPdf.
           </div>
 
@@ -502,7 +502,7 @@ export default function TenantDetailPage() {
           </div>
 
           {ips?.data.length === 0 && (
-            <div className="text-sm text-gray-400 bg-blue-50 border border-blue-100 rounded p-3">
+            <div className="text-sm text-gray-400 bg-primary-50 border border-primary-100 rounded p-3">
               Sin restricciones de IP configuradas — se permite cualquier IP.
             </div>
           )}
@@ -593,12 +593,12 @@ export default function TenantDetailPage() {
                     URL para configurar en DAVISIGN / EU DSS
                   </p>
                   <div className="flex items-center gap-2">
-                    <div className="flex-1 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 font-mono text-sm text-blue-800">
+                    <div className="flex-1 bg-primary-50 border border-primary-200 rounded-lg px-3 py-2 font-mono text-sm text-primary-800">
                       {basicAuths?.tsa_endpoint?.replace("/ts", "/tsp") || "https://tsa.bigdavi.com/tsp"}
                     </div>
                     <button
                       onClick={() => navigator.clipboard.writeText(basicAuths?.tsa_endpoint?.replace("/ts", "/tsp") || "https://tsa.bigdavi.com/tsp")}
-                      className="px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                      className="px-3 py-2 text-sm bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors"
                     >
                       Copiar
                     </button>
@@ -610,7 +610,7 @@ export default function TenantDetailPage() {
               </div>
 
               {/* Recordatorio IP Allowlist */}
-              <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 text-sm text-blue-800">
+              <div className="bg-primary-50 border border-primary-100 rounded-lg p-4 text-sm text-primary-800">
                 <p className="font-medium mb-1">Paso obligatorio: agregar la IP del cliente</p>
                 <p>
                   Dirígete a la pestaña <strong>IP Allowlist</strong> y agrega la IP pública del servidor o
@@ -705,7 +705,7 @@ function QuotaForm({ tenantId, initialQuota }: {
             type="checkbox"
             checked={hardLimit}
             onChange={(e) => setHardLimit(e.target.checked)}
-            className="w-4 h-4 rounded border-gray-300 text-blue-600"
+            className="w-4 h-4 rounded border-gray-300 text-primary-600"
           />
           <div>
             <span className="text-sm font-medium text-gray-700">Límite estricto (hard limit)</span>
@@ -718,7 +718,7 @@ function QuotaForm({ tenantId, initialQuota }: {
             type="checkbox"
             checked={autoSuspend}
             onChange={(e) => setAutoSuspend(e.target.checked)}
-            className="w-4 h-4 rounded border-gray-300 text-blue-600"
+            className="w-4 h-4 rounded border-gray-300 text-primary-600"
           />
           <div>
             <span className="text-sm font-medium text-gray-700">Suspender automáticamente</span>

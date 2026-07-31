@@ -8,14 +8,28 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // Paleta de marca BIGDAVI
         primary: {
-          50:  "#eff6ff",
+          50:  "#eef6ff",
           100: "#dbeafe",
-          500: "#3b82f6",
-          600: "#2563eb",
-          700: "#1d4ed8",
-          900: "#1e3a8a",
+          200: "#bde0fe",
+          300: "#7cc3fb",
+          400: "#29b6f6", // sky
+          500: "#4a91f5",
+          600: "#1274f2", // blue — color principal
+          700: "#0f5fc9",
+          800: "#0d4da3",
+          900: "#0b1f3a", // navy
         },
+        brand: {
+          navy: "#0b1f3a",
+          blue: "#1274f2",
+          sky:  "#29b6f6",
+        },
+      },
+      fontFamily: {
+        heading: ["var(--font-heading)", "sans-serif"],
+        sans: ["var(--font-body)", "sans-serif"],
       },
     },
   },

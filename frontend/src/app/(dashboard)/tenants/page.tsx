@@ -149,7 +149,7 @@ function TenantRow({ tenant, onSuspend, onReactivate, onDelete }: {
   return (
     <tr className="hover:bg-gray-50">
       <td className="px-4 py-3">
-        <Link href={`/tenants/${tenant.id}`} className="font-medium text-blue-600 hover:underline">
+        <Link href={`/tenants/${tenant.id}`} className="font-medium text-primary-600 hover:underline">
           {tenant.name}
         </Link>
         {tenant.contact_email && (
@@ -341,7 +341,7 @@ function CreateTenantWizard({ onClose, onCreated }: {
                   type="checkbox"
                   checked={allowAllIPs}
                   onChange={e => { setAllowAllIPs(e.target.checked); if (e.target.checked) setIpEntries([]); }}
-                  className="w-4 h-4 rounded border-gray-300 text-blue-600"
+                  className="w-4 h-4 rounded border-gray-300 text-primary-600"
                 />
                 <span className="text-sm text-gray-700">Permitir cualquier IP</span>
               </label>
@@ -365,8 +365,8 @@ function CreateTenantWizard({ onClose, onCreated }: {
                   {ipEntries.length > 0 && (
                     <div className="space-y-1 max-h-32 overflow-y-auto mb-2">
                       {ipEntries.map((e, i) => (
-                        <div key={i} className="flex items-center justify-between bg-blue-50 rounded px-3 py-2">
-                          <span className="font-mono text-sm text-blue-900">{e.cidr}</span>
+                        <div key={i} className="flex items-center justify-between bg-primary-50 rounded px-3 py-2">
+                          <span className="font-mono text-sm text-primary-900">{e.cidr}</span>
                           <button onClick={() => removeIP(i)} className="text-red-400 hover:text-red-600 text-sm">✕</button>
                         </div>
                       ))}
@@ -416,19 +416,19 @@ function CreateTenantWizard({ onClose, onCreated }: {
             </div>
 
             {/* URL de firma — el dato más importante */}
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-              <p className="text-xs font-bold text-blue-700 uppercase tracking-wide mb-1">
+            <div className="bg-primary-50 border border-primary-200 rounded-xl p-4">
+              <p className="text-xs font-bold text-primary-700 uppercase tracking-wide mb-1">
                 🖊 URL para software de firma
               </p>
-              <p className="text-xs text-blue-600 mb-2">
+              <p className="text-xs text-primary-600 mb-2">
                 Configurá esta URL en DAVISIGN, Adobe, JSignPdf, etc. No requiere usuario ni contraseña.
               </p>
-              <div className="bg-white border border-blue-200 rounded-lg p-3 font-mono text-xs text-blue-900 break-all">
+              <div className="bg-white border border-primary-200 rounded-lg p-3 font-mono text-xs text-primary-900 break-all">
                 {result.credential.stamp_url}
               </div>
               <button
                 onClick={() => navigator.clipboard.writeText(result.credential.stamp_url!)}
-                className="w-full mt-2 px-3 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium"
+                className="w-full mt-2 px-3 py-2 text-sm bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors font-medium"
               >
                 Copiar URL de firma
               </button>

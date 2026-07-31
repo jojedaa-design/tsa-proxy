@@ -13,11 +13,12 @@ import (
 )
 
 type AuditHandler struct {
-	repo *postgres.AuditRepository
+	repo     *postgres.AuditRepository
+	userRepo *postgres.AdminUserRepository
 }
 
-func NewAuditHandler(repo *postgres.AuditRepository) *AuditHandler {
-	return &AuditHandler{repo: repo}
+func NewAuditHandler(repo *postgres.AuditRepository, userRepo *postgres.AdminUserRepository) *AuditHandler {
+	return &AuditHandler{repo: repo, userRepo: userRepo}
 }
 
 // List — GET /api/admin/v1/audit-events
@@ -61,6 +62,21 @@ func (h *AuditHandler) List(w http.ResponseWriter, r *http.Request) {
 			f.To = &end
 		}
 	}
+
+	if tid := q.Get("tenant_id"); tid != "" {
+		id, err := uuid.Parse(tid)
+		if err != nil {
+			apierr.WriteError(w, r, apierr.ErrBadRequest)
+			return
+		}
+		f.TenantID = &id
+	}
+	allowed, apiErr := resolveTenantScope(r.Context(), h.userRepo, f.TenantID)
+	if apiErr != nil {
+		apierr.WriteError(w, r, apiErr)
+		return
+	}
+	f.AllowedTenantIDs = allowed
 
 	events, total, err := h.repo.List(r.Context(), f)
 	if err != nil {

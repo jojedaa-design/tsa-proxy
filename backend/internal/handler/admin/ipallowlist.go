@@ -107,6 +107,7 @@ func (h *IPAllowlistHandler) Create(w http.ResponseWriter, r *http.Request) {
 			Action:     "ip_allowlist.create",
 			EntityType: "ip_allowlist",
 			EntityID:   &eid,
+			TenantID:   &tenantID,
 			Changes:    map[string]interface{}{"cidr": cidr, "tenant_id": tenantID},
 		})
 	}()

@@ -32,10 +32,10 @@ func (r *AuditRepository) Insert(ctx context.Context, e *model.AuditEvent) error
 
 	_, err := r.pool.Exec(ctx, `
 		INSERT INTO audit_events
-		  (actor_id, actor_type, action, entity_type, entity_id, changes, ip_address, user_agent)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+		  (actor_id, actor_type, action, entity_type, entity_id, changes, ip_address, user_agent, tenant_id)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
 	`, e.ActorID, e.ActorType, e.Action, e.EntityType, e.EntityID,
-		changesJSON, e.IPAddress, e.UserAgent)
+		changesJSON, e.IPAddress, e.UserAgent, e.TenantID)
 	return err
 }
 
@@ -44,10 +44,14 @@ type AuditFilter struct {
 	Action     string
 	EntityType string
 	EntityID   *uuid.UUID
+	TenantID   *uuid.UUID
 	From       *time.Time
 	To         *time.Time
 	Page       int
 	Limit      int
+	// AllowedTenantIDs, si no es nil, restringe el resultado a este conjunto
+	// de tenants (usado para usuarios "viewer" con scope limitado). nil = sin restricción.
+	AllowedTenantIDs []uuid.UUID
 }
 
 func (r *AuditRepository) List(ctx context.Context, f AuditFilter) ([]*model.AuditEvent, int, error) {
@@ -93,6 +97,16 @@ func (r *AuditRepository) List(ctx context.Context, f AuditFilter) ([]*model.Aud
 		args = append(args, *f.To)
 		argIdx++
 	}
+	if f.TenantID != nil {
+		where += fmt.Sprintf(" AND ae.tenant_id = $%d", argIdx)
+		args = append(args, *f.TenantID)
+		argIdx++
+	}
+	if f.AllowedTenantIDs != nil {
+		where += fmt.Sprintf(" AND ae.tenant_id = ANY($%d)", argIdx)
+		args = append(args, f.AllowedTenantIDs)
+		argIdx++
+	}
 
 	var total int
 	countSQL := fmt.Sprintf(`SELECT COUNT(*) FROM audit_events ae %s`, where)
@@ -104,7 +118,7 @@ func (r *AuditRepository) List(ctx context.Context, f AuditFilter) ([]*model.Aud
 	dataSQL := fmt.Sprintf(`
 		SELECT ae.id, ae.actor_id, ae.actor_type, COALESCE(au.username,'system'),
 		       ae.action, ae.entity_type, ae.entity_id,
-		       ae.changes, ae.ip_address, ae.user_agent, ae.occurred_at
+		       ae.changes, ae.ip_address, ae.user_agent, ae.occurred_at, ae.tenant_id
 		FROM audit_events ae
 		LEFT JOIN admin_users au ON au.id = ae.actor_id
 		%s
@@ -126,7 +140,7 @@ func (r *AuditRepository) List(ctx context.Context, f AuditFilter) ([]*model.Aud
 		if err := rows.Scan(
 			&e.ID, &e.ActorID, &e.ActorType, &e.ActorName,
 			&e.Action, &e.EntityType, &e.EntityID,
-			&changesRaw, &ipStr, &ua, &e.OccurredAt,
+			&changesRaw, &ipStr, &ua, &e.OccurredAt, &e.TenantID,
 		); err != nil {
 			return nil, 0, err
 		}

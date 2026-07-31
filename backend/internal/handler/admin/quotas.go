@@ -118,6 +118,7 @@ func (h *QuotasHandler) Update(w http.ResponseWriter, r *http.Request) {
 			Action:     "quota.update",
 			EntityType: "tenant",
 			EntityID:   &eid,
+			TenantID:   &eid,
 			Changes:    changes,
 		})
 	}()

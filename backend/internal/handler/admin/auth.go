@@ -256,11 +256,19 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// tenant_scope: solo relevante para viewer; vacío/omitido = todos los tenants.
+	var tenantScope []string
+	scope, _ := h.userRepo.GetTenantScope(r.Context(), user.ID)
+	for _, tid := range scope {
+		tenantScope = append(tenantScope, tid.String())
+	}
+
 	apierr.WriteJSON(w, http.StatusOK, map[string]interface{}{
 		"id":            user.ID,
 		"username":      user.Username,
 		"email":         user.Email,
 		"roles":         user.Roles,
+		"tenant_scope":  tenantScope,
 		"totp_enabled":  user.TOTPEnabled,
 		"last_login_at": user.LastLoginAt,
 	})

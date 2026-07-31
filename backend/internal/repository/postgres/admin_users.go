@@ -135,3 +135,213 @@ func (r *AdminUserRepository) GetRoleByName(ctx context.Context, name string) (*
 	}
 	return role, err
 }
+
+// ListRoles devuelve todos los roles disponibles (para el selector del formulario).
+func (r *AdminUserRepository) ListRoles(ctx context.Context) ([]*model.Role, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, name, description, created_at FROM roles ORDER BY name
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	roles := make([]*model.Role, 0)
+	for rows.Next() {
+		role := &model.Role{}
+		if err := rows.Scan(&role.ID, &role.Name, &role.Description, &role.CreatedAt); err != nil {
+			return nil, err
+		}
+		roles = append(roles, role)
+	}
+	return roles, rows.Err()
+}
+
+// AdminUserFilter agrupa los filtros opcionales para List.
+type AdminUserFilter struct {
+	Search string
+	Page   int
+	Limit  int
+}
+
+// List devuelve usuarios de la plataforma con paginación y búsqueda.
+func (r *AdminUserRepository) List(ctx context.Context, f AdminUserFilter) ([]*model.AdminUser, int, error) {
+	if f.Page < 1 {
+		f.Page = 1
+	}
+	if f.Limit < 1 || f.Limit > 200 {
+		f.Limit = 20
+	}
+	offset := (f.Page - 1) * f.Limit
+
+	args := []interface{}{}
+	where := "WHERE deleted_at IS NULL"
+	argIdx := 1
+
+	if f.Search != "" {
+		where += fmt.Sprintf(" AND (username ILIKE $%d OR email ILIKE $%d)", argIdx, argIdx)
+		args = append(args, "%"+f.Search+"%")
+		argIdx++
+	}
+
+	countSQL := fmt.Sprintf(`SELECT COUNT(*) FROM admin_users %s`, where)
+	var total int
+	if err := r.pool.QueryRow(ctx, countSQL, args...).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("count admin users: %w", err)
+	}
+
+	args = append(args, f.Limit, offset)
+	dataSQL := fmt.Sprintf(`
+		SELECT id, username, email, password_hash, is_active, totp_secret, totp_enabled,
+		       last_login_at, last_login_ip::text, created_at, updated_at
+		FROM admin_users
+		%s
+		ORDER BY created_at DESC
+		LIMIT $%d OFFSET $%d`, where, argIdx, argIdx+1)
+
+	rows, err := r.pool.Query(ctx, dataSQL, args...)
+	if err != nil {
+		return nil, 0, fmt.Errorf("list admin users: %w", err)
+	}
+	defer rows.Close()
+
+	users := make([]*model.AdminUser, 0)
+	for rows.Next() {
+		u := &model.AdminUser{}
+		if err := rows.Scan(
+			&u.ID, &u.Username, &u.Email, &u.PasswordHash,
+			&u.IsActive, &u.TOTPSecret, &u.TOTPEnabled,
+			&u.LastLoginAt, &u.LastLoginIP,
+			&u.CreatedAt, &u.UpdatedAt,
+		); err != nil {
+			return nil, 0, err
+		}
+		users = append(users, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+
+	for _, u := range users {
+		u.Roles, _ = r.GetRoles(ctx, u.ID)
+	}
+
+	return users, total, nil
+}
+
+// Update actualiza email y estado activo de un usuario.
+func (r *AdminUserRepository) Update(ctx context.Context, id uuid.UUID, email string, isActive bool) (*model.AdminUser, error) {
+	u := &model.AdminUser{}
+	err := r.pool.QueryRow(ctx, `
+		UPDATE admin_users SET email=$1, is_active=$2, updated_at=NOW()
+		WHERE id=$3 AND deleted_at IS NULL
+		RETURNING id, username, email, is_active, totp_enabled, created_at, updated_at
+	`, email, isActive, id).Scan(
+		&u.ID, &u.Username, &u.Email, &u.IsActive, &u.TOTPEnabled, &u.CreatedAt, &u.UpdatedAt,
+	)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("update admin user: %w", err)
+	}
+	u.Roles, _ = r.GetRoles(ctx, u.ID)
+	return u, nil
+}
+
+// SetPassword reemplaza el hash de contraseña de un usuario.
+func (r *AdminUserRepository) SetPassword(ctx context.Context, id uuid.UUID, hash string) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE admin_users SET password_hash=$1, updated_at=NOW() WHERE id=$2
+	`, hash, id)
+	return err
+}
+
+// SoftDelete marca un usuario como eliminado sin borrar el registro.
+func (r *AdminUserRepository) SoftDelete(ctx context.Context, id uuid.UUID) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE admin_users SET deleted_at=NOW(), updated_at=NOW() WHERE id=$1
+	`, id)
+	return err
+}
+
+// SetRole reemplaza el rol de un usuario por uno solo (borra los previos).
+func (r *AdminUserRepository) SetRole(ctx context.Context, userID, roleID, grantedBy uuid.UUID) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx, `DELETE FROM admin_user_roles WHERE admin_user_id=$1`, userID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO admin_user_roles (admin_user_id, role_id, granted_by)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (admin_user_id, role_id) DO NOTHING
+	`, userID, roleID, grantedBy); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// GetTenantScope devuelve los tenants a los que un usuario viewer está restringido.
+// Una lista vacía significa acceso irrestricto (todos los tenants).
+func (r *AdminUserRepository) GetTenantScope(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT tenant_id FROM admin_user_tenant_scope WHERE admin_user_id=$1
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	scope := make([]uuid.UUID, 0)
+	for rows.Next() {
+		var tid uuid.UUID
+		if err := rows.Scan(&tid); err != nil {
+			return nil, err
+		}
+		scope = append(scope, tid)
+	}
+	return scope, rows.Err()
+}
+
+// SetTenantScope reemplaza el scope de tenants de un usuario viewer.
+// Una lista vacía deja al usuario sin restricción (todos los tenants).
+func (r *AdminUserRepository) SetTenantScope(ctx context.Context, userID uuid.UUID, tenantIDs []uuid.UUID) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx, `DELETE FROM admin_user_tenant_scope WHERE admin_user_id=$1`, userID); err != nil {
+		return err
+	}
+	for _, tid := range tenantIDs {
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO admin_user_tenant_scope (admin_user_id, tenant_id)
+			VALUES ($1, $2)
+			ON CONFLICT (admin_user_id, tenant_id) DO NOTHING
+		`, userID, tid); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
+// CountByRole cuenta usuarios activos y no eliminados con un rol dado.
+// Se usa para evitar dejar la plataforma sin ningún superadmin.
+func (r *AdminUserRepository) CountByRole(ctx context.Context, roleName string) (int, error) {
+	var count int
+	err := r.pool.QueryRow(ctx, `
+		SELECT COUNT(DISTINCT aur.admin_user_id)
+		FROM admin_user_roles aur
+		JOIN roles r ON r.id = aur.role_id
+		JOIN admin_users au ON au.id = aur.admin_user_id
+		WHERE r.name = $1 AND au.deleted_at IS NULL AND au.is_active = TRUE
+	`, roleName).Scan(&count)
+	return count, err
+}

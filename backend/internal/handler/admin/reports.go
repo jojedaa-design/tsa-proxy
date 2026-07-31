@@ -17,10 +17,11 @@ import (
 type ReportsHandler struct {
 	usageRepo  *postgres.UsageRepository
 	failedRepo *postgres.FailedRequestRepository
+	userRepo   *postgres.AdminUserRepository
 }
 
-func NewReportsHandler(usageRepo *postgres.UsageRepository, failedRepo *postgres.FailedRequestRepository) *ReportsHandler {
-	return &ReportsHandler{usageRepo: usageRepo, failedRepo: failedRepo}
+func NewReportsHandler(usageRepo *postgres.UsageRepository, failedRepo *postgres.FailedRequestRepository, userRepo *postgres.AdminUserRepository) *ReportsHandler {
+	return &ReportsHandler{usageRepo: usageRepo, failedRepo: failedRepo, userRepo: userRepo}
 }
 
 // FailureDetail describe un motivo de fallo con su conteo y metadatos de presentación.
@@ -51,6 +52,12 @@ func (h *ReportsHandler) Usage(w http.ResponseWriter, r *http.Request) {
 		apierr.WriteValidationError(w, r, map[string]string{"filter": err.Error()})
 		return
 	}
+	allowed, apiErr := resolveTenantScope(r.Context(), h.userRepo, f.TenantID)
+	if apiErr != nil {
+		apierr.WriteError(w, r, apiErr)
+		return
+	}
+	f.AllowedTenantIDs = allowed
 
 	aggregates, err := h.usageRepo.GetAggregates(r.Context(), *f)
 	if err != nil {
@@ -93,6 +100,12 @@ func (h *ReportsHandler) UsageCSV(w http.ResponseWriter, r *http.Request) {
 		apierr.WriteValidationError(w, r, map[string]string{"filter": err.Error()})
 		return
 	}
+	allowed, apiErr := resolveTenantScope(r.Context(), h.userRepo, f.TenantID)
+	if apiErr != nil {
+		apierr.WriteError(w, r, apiErr)
+		return
+	}
+	f.AllowedTenantIDs = allowed
 
 	aggregates, err := h.usageRepo.GetAggregates(r.Context(), *f)
 	if err != nil {
@@ -130,7 +143,12 @@ func (h *ReportsHandler) UsageCSV(w http.ResponseWriter, r *http.Request) {
 
 // Summary — GET /api/admin/v1/reports/usage/summary
 func (h *ReportsHandler) Summary(w http.ResponseWriter, r *http.Request) {
-	summary, err := h.usageRepo.GetDashboardSummary(r.Context())
+	allowed, apiErr := resolveTenantScope(r.Context(), h.userRepo, nil)
+	if apiErr != nil {
+		apierr.WriteError(w, r, apiErr)
+		return
+	}
+	summary, err := h.usageRepo.GetDashboardSummary(r.Context(), allowed)
 	if err != nil {
 		apierr.WriteError(w, r, apierr.ErrInternal)
 		return
@@ -146,8 +164,13 @@ func (h *ReportsHandler) TopIPs(w http.ResponseWriter, r *http.Request) {
 		apierr.WriteValidationError(w, r, map[string]string{"filter": err.Error()})
 		return
 	}
+	allowed, apiErr := resolveTenantScope(r.Context(), h.userRepo, f.TenantID)
+	if apiErr != nil {
+		apierr.WriteError(w, r, apiErr)
+		return
+	}
 
-	ips, err := h.usageRepo.GetTopIPs(r.Context(), f.From, f.To, 50)
+	ips, err := h.usageRepo.GetTopIPs(r.Context(), f.From, f.To, 50, allowed)
 	if err != nil {
 		apierr.WriteError(w, r, apierr.ErrInternal)
 		return
@@ -164,8 +187,13 @@ func (h *ReportsHandler) TopUserAgents(w http.ResponseWriter, r *http.Request) {
 		apierr.WriteValidationError(w, r, map[string]string{"filter": err.Error()})
 		return
 	}
+	allowed, apiErr := resolveTenantScope(r.Context(), h.userRepo, f.TenantID)
+	if apiErr != nil {
+		apierr.WriteError(w, r, apiErr)
+		return
+	}
 
-	agents, err := h.usageRepo.GetTopUserAgents(r.Context(), f.From, f.To, 50)
+	agents, err := h.usageRepo.GetTopUserAgents(r.Context(), f.From, f.To, 50, allowed)
 	if err != nil {
 		apierr.WriteError(w, r, apierr.ErrInternal)
 		return
@@ -182,8 +210,13 @@ func (h *ReportsHandler) TopCountries(w http.ResponseWriter, r *http.Request) {
 		apierr.WriteValidationError(w, r, map[string]string{"filter": err.Error()})
 		return
 	}
+	allowed, apiErr := resolveTenantScope(r.Context(), h.userRepo, f.TenantID)
+	if apiErr != nil {
+		apierr.WriteError(w, r, apiErr)
+		return
+	}
 
-	countries, err := h.usageRepo.GetTopCountries(r.Context(), f.From, f.To, 50)
+	countries, err := h.usageRepo.GetTopCountries(r.Context(), f.From, f.To, 50, allowed)
 	if err != nil {
 		apierr.WriteError(w, r, apierr.ErrInternal)
 		return
@@ -203,16 +236,21 @@ func (h *ReportsHandler) FailureBreakdown(w http.ResponseWriter, r *http.Request
 		apierr.WriteValidationError(w, r, map[string]string{"filter": err.Error()})
 		return
 	}
+	allowed, apiErr := resolveTenantScope(r.Context(), h.userRepo, f.TenantID)
+	if apiErr != nil {
+		apierr.WriteError(w, r, apiErr)
+		return
+	}
 
 	// Errores registrados en usage_events (llegaron al proxy, fallaron en upstream o fueron rechazados por cuota)
-	upstreamStats, err := h.usageRepo.GetUpstreamFailureStats(r.Context(), f.TenantID, f.From, f.To)
+	upstreamStats, err := h.usageRepo.GetUpstreamFailureStats(r.Context(), f.TenantID, allowed, f.From, f.To)
 	if err != nil {
 		apierr.WriteError(w, r, apierr.ErrInternal)
 		return
 	}
 
 	// Rechazos previos al proxy (autenticación, rate limit, IP bloqueada…)
-	authStats, err := h.failedRepo.GetBreakdown(r.Context(), f.TenantID, f.From, f.To)
+	authStats, err := h.failedRepo.GetBreakdown(r.Context(), f.TenantID, allowed, f.From, f.To)
 	if err != nil {
 		apierr.WriteError(w, r, apierr.ErrInternal)
 		return

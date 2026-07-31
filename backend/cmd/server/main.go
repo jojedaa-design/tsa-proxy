@@ -124,9 +124,10 @@ func main() {
 	adminNoAuthH    := adminhandler.NewNoAuthHandler(noauthRepo)
 	adminIPH      := adminhandler.NewIPAllowlistHandler(ipAllowRepo, cache, auditRepo)
 	adminQuotasH  := adminhandler.NewQuotasHandler(quotaRepo, auditRepo, cache)
-	adminReportsH := adminhandler.NewReportsHandler(usageRepo, failedRepo)
-	adminAuditH   := adminhandler.NewAuditHandler(auditRepo)
+	adminReportsH := adminhandler.NewReportsHandler(usageRepo, failedRepo, adminUserRepo)
+	adminAuditH   := adminhandler.NewAuditHandler(auditRepo, adminUserRepo)
 	adminConfigH  := adminhandler.NewConfigHandler(upstreamRepo, quotaRepo, cache, cfg.Upstream.AllowedHosts)
+	adminUsersH   := adminhandler.NewUsersHandler(adminUserRepo, tenantRepo)
 
 	// ── Router ────────────────────────────────────────────────────
 	router := server.NewRouter(&server.Deps{
@@ -141,6 +142,7 @@ func main() {
 		AdminReports:     adminReportsH,
 		AdminAudit:       adminAuditH,
 		AdminConfig:      adminConfigH,
+		AdminUsers:       adminUsersH,
 		AuthMW:           authMW,
 		AdminAuthMW:      adminAuthMW,
 		RateLimitMW:      rateLimitMW,

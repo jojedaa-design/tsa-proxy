@@ -26,6 +26,7 @@ type Deps struct {
 	AdminReports     *adminhandler.ReportsHandler
 	AdminAudit       *adminhandler.AuditHandler
 	AdminConfig      *adminhandler.ConfigHandler
+	AdminUsers       *adminhandler.UsersHandler
 	// Middlewares
 	AuthMW      *middleware.AuthMiddleware
 	AdminAuthMW *middleware.AdminAuthMiddleware
@@ -125,56 +126,90 @@ func NewRouter(d *Deps) http.Handler {
 		r.Group(func(r chi.Router) {
 			r.Use(d.AdminAuthMW.Require)
 
-			// Tenants
-			r.Route("/tenants", func(r chi.Router) {
-				r.Get("/",  d.AdminTenants.List)
-				r.Post("/", d.AdminTenants.Create)
-				r.Route("/{id}", func(r chi.Router) {
-					r.Get("/",   d.AdminTenants.Get)
-					r.Put("/",   d.AdminTenants.Update)
-					r.Delete("/", d.AdminTenants.Delete)
-					r.Post("/suspend",    d.AdminTenants.Suspend)
-					r.Post("/reactivate", d.AdminTenants.Reactivate)
+			// ── Recursos administrativos: solo superadmin/admin ──────
+			// (gestión de tenants, credenciales, config, usuarios de la plataforma)
+			r.Group(func(r chi.Router) {
+				r.Use(d.AdminAuthMW.RequireRole("superadmin", "admin"))
 
-					// Sub-recursos del tenant
-					r.Get("/credentials",  d.AdminCredentials.ListByTenant)
-					r.Post("/credentials", d.AdminCredentials.Create)
+				// Tenants
+				r.Route("/tenants", func(r chi.Router) {
+					r.Get("/",  d.AdminTenants.List)
+					r.Post("/", d.AdminTenants.Create)
+					r.Route("/{id}", func(r chi.Router) {
+						r.Get("/",   d.AdminTenants.Get)
+						r.Put("/",   d.AdminTenants.Update)
+						r.Delete("/", d.AdminTenants.Delete)
+						r.Post("/suspend",    d.AdminTenants.Suspend)
+						r.Post("/reactivate", d.AdminTenants.Reactivate)
 
-					r.Get("/ip-allowlist",  d.AdminIPAllowlist.ListByTenant)
-					r.Post("/ip-allowlist", d.AdminIPAllowlist.Create)
+						// Sub-recursos del tenant
+						r.Get("/credentials",  d.AdminCredentials.ListByTenant)
+						r.Post("/credentials", d.AdminCredentials.Create)
 
-					r.Get("/quota", d.AdminQuotas.Get)
-					r.Put("/quota", d.AdminQuotas.Update)
+						r.Get("/ip-allowlist",  d.AdminIPAllowlist.ListByTenant)
+						r.Post("/ip-allowlist", d.AdminIPAllowlist.Create)
 
-					r.Get("/basic-auth",  d.AdminBasicAuth.ListByTenant)
-					r.Post("/basic-auth", d.AdminBasicAuth.Create)
+						r.Get("/quota", d.AdminQuotas.Get)
+						r.Put("/quota", d.AdminQuotas.Update)
 
-					// No-Auth Access (acceso por IP sin credenciales)
-					r.Get("/noauth",          d.AdminNoAuth.GetByTenant)
-					r.Post("/noauth/enable",  d.AdminNoAuth.Enable)
-					r.Post("/noauth/disable", d.AdminNoAuth.Disable)
-					r.Delete("/noauth",       d.AdminNoAuth.Delete)
+						r.Get("/basic-auth",  d.AdminBasicAuth.ListByTenant)
+						r.Post("/basic-auth", d.AdminBasicAuth.Create)
+
+						// No-Auth Access (acceso por IP sin credenciales)
+						r.Get("/noauth",          d.AdminNoAuth.GetByTenant)
+						r.Post("/noauth/enable",  d.AdminNoAuth.Enable)
+						r.Post("/noauth/disable", d.AdminNoAuth.Disable)
+						r.Delete("/noauth",       d.AdminNoAuth.Delete)
+					})
 				})
+
+				// Credenciales (acciones por ID de credencial)
+				r.Route("/credentials/{id}", func(r chi.Router) {
+					r.Post("/rotate", d.AdminCredentials.Rotate)
+					r.Post("/revoke", d.AdminCredentials.Revoke)
+				})
+
+				// Basic Auth (revocar por ID)
+				r.Route("/basic-auth/{id}", func(r chi.Router) {
+					r.Post("/revoke", d.AdminBasicAuth.Revoke)
+				})
+
+				// IP allowlist (eliminar por ID de entrada)
+				r.Route("/ip-allowlist/{id}", func(r chi.Router) {
+					r.Put("/",    d.AdminIPAllowlist.Update)
+					r.Delete("/", d.AdminIPAllowlist.Delete)
+				})
+
+				// Configuración (upstreams TSA)
+				r.Route("/config/upstreams", func(r chi.Router) {
+					r.Get("/",  d.AdminConfig.ListUpstreams)
+					r.Post("/", d.AdminConfig.CreateUpstream)
+					r.Route("/{id}", func(r chi.Router) {
+						r.Put("/",             d.AdminConfig.UpdateUpstream)
+						r.Delete("/",          d.AdminConfig.DeleteUpstream)
+						r.Post("/set-default", d.AdminConfig.SetDefault)
+					})
+				})
+
+				// Planes disponibles (solo lectura para el panel)
+				r.Get("/plans", d.AdminConfig.ListPlans)
+
+				// Usuarios de la plataforma
+				r.Route("/users", func(r chi.Router) {
+					r.Get("/",  d.AdminUsers.List)
+					r.Post("/", d.AdminUsers.Create)
+					r.Route("/{id}", func(r chi.Router) {
+						r.Get("/",    d.AdminUsers.Get)
+						r.Put("/",    d.AdminUsers.Update)
+						r.Delete("/", d.AdminUsers.Delete)
+						r.Post("/reset-password", d.AdminUsers.ResetPassword)
+					})
+				})
+				r.Get("/roles", d.AdminUsers.ListRoles)
 			})
 
-			// Credenciales (acciones por ID de credencial)
-			r.Route("/credentials/{id}", func(r chi.Router) {
-				r.Post("/rotate", d.AdminCredentials.Rotate)
-				r.Post("/revoke", d.AdminCredentials.Revoke)
-			})
-
-			// Basic Auth (revocar por ID)
-			r.Route("/basic-auth/{id}", func(r chi.Router) {
-				r.Post("/revoke", d.AdminBasicAuth.Revoke)
-			})
-
-			// IP allowlist (eliminar por ID de entrada)
-			r.Route("/ip-allowlist/{id}", func(r chi.Router) {
-				r.Put("/",    d.AdminIPAllowlist.Update)
-				r.Delete("/", d.AdminIPAllowlist.Delete)
-			})
-
-			// Reportes
+			// ── Reportes y auditoría: cualquier rol autenticado ──────
+			// (el filtrado por scope de tenant para "viewer" ocurre dentro del handler)
 			r.Route("/reports", func(r chi.Router) {
 				r.Get("/usage",           d.AdminReports.Usage)
 				r.Get("/usage.csv",       d.AdminReports.UsageCSV)
@@ -185,22 +220,7 @@ func NewRouter(d *Deps) http.Handler {
 				r.Get("/failures",        d.AdminReports.FailureBreakdown)
 			})
 
-			// Auditoría
 			r.Get("/audit-events", d.AdminAudit.List)
-
-			// Configuración (upstreams TSA)
-			r.Route("/config/upstreams", func(r chi.Router) {
-				r.Get("/",  d.AdminConfig.ListUpstreams)
-				r.Post("/", d.AdminConfig.CreateUpstream)
-				r.Route("/{id}", func(r chi.Router) {
-					r.Put("/",             d.AdminConfig.UpdateUpstream)
-					r.Delete("/",          d.AdminConfig.DeleteUpstream)
-					r.Post("/set-default", d.AdminConfig.SetDefault)
-				})
-			})
-
-			// Planes disponibles (solo lectura para el panel)
-			r.Get("/plans", d.AdminConfig.ListPlans)
 		})
 	})
 

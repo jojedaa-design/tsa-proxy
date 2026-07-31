@@ -40,12 +40,20 @@ type FailureBreakdownRow struct {
 }
 
 // GetBreakdown devuelve el desglose de rechazos pre-proxy agrupados por failure_reason.
-func (r *FailedRequestRepository) GetBreakdown(ctx context.Context, tenantID *uuid.UUID, from, to time.Time) ([]*FailureBreakdownRow, error) {
+// allowedTenantIDs, si no es nil, restringe el resultado a esos tenants.
+func (r *FailedRequestRepository) GetBreakdown(ctx context.Context, tenantID *uuid.UUID, allowedTenantIDs []uuid.UUID, from, to time.Time) ([]*FailureBreakdownRow, error) {
 	args := []interface{}{from, to}
 	where := "WHERE occurred_at >= $1 AND occurred_at <= $2"
+	argIdx := 3
 	if tenantID != nil {
-		where += " AND tenant_id = $3"
+		where += fmt.Sprintf(" AND tenant_id = $%d", argIdx)
 		args = append(args, *tenantID)
+		argIdx++
+	}
+	if allowedTenantIDs != nil {
+		where += fmt.Sprintf(" AND tenant_id = ANY($%d)", argIdx)
+		args = append(args, allowedTenantIDs)
+		argIdx++
 	}
 	rows, err := r.pool.Query(ctx, fmt.Sprintf(`
 		SELECT failure_reason, COUNT(*) AS count, MAX(occurred_at) AS last_seen

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/bigdavi/tsa-proxy/internal/model"
@@ -40,11 +41,14 @@ func (r *UsageRepository) InsertEvent(ctx context.Context, e *model.UsageEvent) 
 // UsageFilter para consultas de reportes
 type UsageFilter struct {
 	TenantID    *uuid.UUID
-	From        time.Time
-	To          time.Time
-	Granularity string // day | month
-	Page        int
-	Limit       int
+	// AllowedTenantIDs, si no es nil, restringe el resultado a este conjunto
+	// de tenants (usado para usuarios "viewer" con scope limitado). nil = sin restricción.
+	AllowedTenantIDs []uuid.UUID
+	From             time.Time
+	To               time.Time
+	Granularity      string // day | month
+	Page             int
+	Limit            int
 }
 
 // GetAggregates devuelve los agregados de consumo filtrados.
@@ -62,6 +66,11 @@ func (r *UsageRepository) GetAggregates(ctx context.Context, f UsageFilter) ([]*
 	if f.TenantID != nil {
 		where += fmt.Sprintf(" AND m.tenant_id=$%d", argIdx)
 		args = append(args, *f.TenantID)
+		argIdx++
+	}
+	if f.AllowedTenantIDs != nil {
+		where += fmt.Sprintf(" AND m.tenant_id = ANY($%d)", argIdx)
+		args = append(args, f.AllowedTenantIDs)
 		argIdx++
 	}
 
@@ -149,12 +158,21 @@ func (r *UsageRepository) GetIPsByTenant(ctx context.Context, tenantID uuid.UUID
 	return result, rows.Err()
 }
 
-// GetTopIPs devuelve las IPs más activas globalmente en un período
-func (r *UsageRepository) GetTopIPs(ctx context.Context, from, to time.Time, limit int) ([]*IPUsage, error) {
+// GetTopIPs devuelve las IPs más activas globalmente en un período.
+// allowedTenantIDs, si no es nil, restringe el resultado a esos tenants.
+func (r *UsageRepository) GetTopIPs(ctx context.Context, from, to time.Time, limit int, allowedTenantIDs []uuid.UUID) ([]*IPUsage, error) {
 	if limit <= 0 {
 		limit = 20
 	}
-	rows, err := r.pool.Query(ctx, `
+	args := []interface{}{from, to}
+	where := "WHERE ue.occurred_at >= $1 AND ue.occurred_at <= $2"
+	if allowedTenantIDs != nil {
+		where += " AND ue.tenant_id = ANY($3)"
+		args = append(args, allowedTenantIDs)
+	}
+	args = append(args, limit)
+
+	rows, err := r.pool.Query(ctx, fmt.Sprintf(`
 		SELECT
 			host(ue.source_ip) as ip,
 			t.id,
@@ -165,11 +183,11 @@ func (r *UsageRepository) GetTopIPs(ctx context.Context, from, to time.Time, lim
 			MAX(ue.occurred_at) as last_used_at
 		FROM usage_events ue
 		JOIN tenants t ON t.id=ue.tenant_id
-		WHERE ue.occurred_at >= $1 AND ue.occurred_at <= $2
+		%s
 		GROUP BY host(ue.source_ip), t.id, t.name
 		ORDER BY requests DESC
-		LIMIT $3
-	`, from, to, limit)
+		LIMIT $%d
+	`, where, len(args)), args...)
 	if err != nil {
 		return nil, fmt.Errorf("get top ips: %w", err)
 	}
@@ -198,12 +216,21 @@ type UserAgentStat struct {
 	LastUsedAt      *time.Time `json:"last_used_at"`
 }
 
-// GetTopUserAgents devuelve los User-Agents más comunes
-func (r *UsageRepository) GetTopUserAgents(ctx context.Context, from, to time.Time, limit int) ([]*UserAgentStat, error) {
+// GetTopUserAgents devuelve los User-Agents más comunes.
+// allowedTenantIDs, si no es nil, restringe el resultado a esos tenants.
+func (r *UsageRepository) GetTopUserAgents(ctx context.Context, from, to time.Time, limit int, allowedTenantIDs []uuid.UUID) ([]*UserAgentStat, error) {
 	if limit <= 0 {
 		limit = 20
 	}
-	rows, err := r.pool.Query(ctx, `
+	args := []interface{}{from, to}
+	where := "WHERE occurred_at >= $1 AND occurred_at <= $2"
+	if allowedTenantIDs != nil {
+		where += " AND tenant_id = ANY($3)"
+		args = append(args, allowedTenantIDs)
+	}
+	args = append(args, limit)
+
+	rows, err := r.pool.Query(ctx, fmt.Sprintf(`
 		SELECT
 			COALESCE(user_agent, 'unknown') as user_agent,
 			COUNT(*) as requests,
@@ -214,11 +241,11 @@ func (r *UsageRepository) GetTopUserAgents(ctx context.Context, from, to time.Ti
 			AVG(CAST(latency_ms AS FLOAT)) as avg_latency_ms,
 			MAX(occurred_at) as last_used_at
 		FROM usage_events
-		WHERE occurred_at >= $1 AND occurred_at <= $2
+		%s
 		GROUP BY COALESCE(user_agent, 'unknown')
 		ORDER BY requests DESC
-		LIMIT $3
-	`, from, to, limit)
+		LIMIT $%d
+	`, where, len(args)), args...)
 	if err != nil {
 		return nil, fmt.Errorf("get user agents: %w", err)
 	}
@@ -249,12 +276,21 @@ type CountryStat struct {
 	LastUsedAt    *time.Time `json:"last_used_at"`
 }
 
-// GetTopCountries devuelve los países con más acceso
-func (r *UsageRepository) GetTopCountries(ctx context.Context, from, to time.Time, limit int) ([]*CountryStat, error) {
+// GetTopCountries devuelve los países con más acceso.
+// allowedTenantIDs, si no es nil, restringe el resultado a esos tenants.
+func (r *UsageRepository) GetTopCountries(ctx context.Context, from, to time.Time, limit int, allowedTenantIDs []uuid.UUID) ([]*CountryStat, error) {
 	if limit <= 0 {
 		limit = 20
 	}
-	rows, err := r.pool.Query(ctx, `
+	args := []interface{}{from, to}
+	where := "WHERE occurred_at >= $1 AND occurred_at <= $2"
+	if allowedTenantIDs != nil {
+		where += " AND tenant_id = ANY($3)"
+		args = append(args, allowedTenantIDs)
+	}
+	args = append(args, limit)
+
+	rows, err := r.pool.Query(ctx, fmt.Sprintf(`
 		SELECT
 			COALESCE(geo_country, 'unknown') as country,
 			COUNT(*) as requests,
@@ -265,11 +301,11 @@ func (r *UsageRepository) GetTopCountries(ctx context.Context, from, to time.Tim
 			AVG(CAST(latency_ms AS FLOAT)) as avg_latency_ms,
 			MAX(occurred_at) as last_used_at
 		FROM usage_events
-		WHERE occurred_at >= $1 AND occurred_at <= $2
+		%s
 		GROUP BY COALESCE(geo_country, 'unknown')
 		ORDER BY requests DESC
-		LIMIT $3
-	`, from, to, limit)
+		LIMIT $%d
+	`, where, len(args)), args...)
 	if err != nil {
 		return nil, fmt.Errorf("get countries: %w", err)
 	}
@@ -296,12 +332,19 @@ type UpstreamFailureStat struct {
 
 // GetUpstreamFailureStats devuelve los errores y rechazos registrados en usage_events,
 // agrupados por rejection_reason (o "upstream_error" si el campo es NULL).
-func (r *UsageRepository) GetUpstreamFailureStats(ctx context.Context, tenantID *uuid.UUID, from, to time.Time) ([]*UpstreamFailureStat, error) {
+func (r *UsageRepository) GetUpstreamFailureStats(ctx context.Context, tenantID *uuid.UUID, allowedTenantIDs []uuid.UUID, from, to time.Time) ([]*UpstreamFailureStat, error) {
 	args := []interface{}{from, to}
 	where := "WHERE status IN ('error', 'rejected') AND occurred_at >= $1 AND occurred_at <= $2"
+	argIdx := 3
 	if tenantID != nil {
-		where += " AND tenant_id = $3"
+		where += fmt.Sprintf(" AND tenant_id = $%d", argIdx)
 		args = append(args, *tenantID)
+		argIdx++
+	}
+	if allowedTenantIDs != nil {
+		where += fmt.Sprintf(" AND tenant_id = ANY($%d)", argIdx)
+		args = append(args, allowedTenantIDs)
+		argIdx++
 	}
 	rows, err := r.pool.Query(ctx, fmt.Sprintf(`
 		SELECT
@@ -345,50 +388,99 @@ type TopTenant struct {
 	Requests   int       `json:"requests"`
 }
 
-func (r *UsageRepository) GetDashboardSummary(ctx context.Context) (*DashboardSummary, error) {
+// GetDashboardSummary retorna el resumen para el dashboard.
+// allowedTenantIDs, si no es nil, restringe todo el resumen a esos tenants.
+func (r *UsageRepository) GetDashboardSummary(ctx context.Context, allowedTenantIDs []uuid.UUID) (*DashboardSummary, error) {
 	s := &DashboardSummary{}
+	scoped := allowedTenantIDs != nil
 
 	// Tenants activos
-	_ = r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM tenants WHERE status='active' AND deleted_at IS NULL`).
-		Scan(&s.ActiveTenants)
+	if scoped {
+		_ = r.pool.QueryRow(ctx, `
+			SELECT COUNT(*) FROM tenants WHERE status='active' AND deleted_at IS NULL AND id = ANY($1)
+		`, allowedTenantIDs).Scan(&s.ActiveTenants)
+	} else {
+		_ = r.pool.QueryRow(ctx, `SELECT COUNT(*) FROM tenants WHERE status='active' AND deleted_at IS NULL`).
+			Scan(&s.ActiveTenants)
+	}
 
 	now := time.Now()
 	y, m, _ := now.Date()
 
 	// Requests hoy
 	today := time.Date(y, m, now.Day(), 0, 0, 0, 0, now.Location())
-	_ = r.pool.QueryRow(ctx, `
-		SELECT COUNT(*) FROM usage_events
-		WHERE occurred_at >= $1 AND status='success'
-	`, today).Scan(&s.TodayRequests)
+	if scoped {
+		_ = r.pool.QueryRow(ctx, `
+			SELECT COUNT(*) FROM usage_events
+			WHERE occurred_at >= $1 AND status='success' AND tenant_id = ANY($2)
+		`, today, allowedTenantIDs).Scan(&s.TodayRequests)
+	} else {
+		_ = r.pool.QueryRow(ctx, `
+			SELECT COUNT(*) FROM usage_events
+			WHERE occurred_at >= $1 AND status='success'
+		`, today).Scan(&s.TodayRequests)
+	}
 
 	// Requests este mes (de los agregados, más rápido)
-	_ = r.pool.QueryRow(ctx, `
-		SELECT COALESCE(SUM(total_requests),0) FROM monthly_usage_aggregates
-		WHERE year=$1 AND month=$2
-	`, y, int(m)).Scan(&s.MonthRequests)
+	if scoped {
+		_ = r.pool.QueryRow(ctx, `
+			SELECT COALESCE(SUM(total_requests),0) FROM monthly_usage_aggregates
+			WHERE year=$1 AND month=$2 AND tenant_id = ANY($3)
+		`, y, int(m), allowedTenantIDs).Scan(&s.MonthRequests)
+	} else {
+		_ = r.pool.QueryRow(ctx, `
+			SELECT COALESCE(SUM(total_requests),0) FROM monthly_usage_aggregates
+			WHERE year=$1 AND month=$2
+		`, y, int(m)).Scan(&s.MonthRequests)
+	}
 
 	// Errores últimas 24h
 	since24h := now.Add(-24 * time.Hour)
-	_ = r.pool.QueryRow(ctx, `
-		SELECT COUNT(*) FROM usage_events
-		WHERE occurred_at >= $1 AND status IN ('error','rejected')
-	`, since24h).Scan(&s.ErrorsLast24h)
+	if scoped {
+		_ = r.pool.QueryRow(ctx, `
+			SELECT COUNT(*) FROM usage_events
+			WHERE occurred_at >= $1 AND status IN ('error','rejected') AND tenant_id = ANY($2)
+		`, since24h, allowedTenantIDs).Scan(&s.ErrorsLast24h)
+	} else {
+		_ = r.pool.QueryRow(ctx, `
+			SELECT COUNT(*) FROM usage_events
+			WHERE occurred_at >= $1 AND status IN ('error','rejected')
+		`, since24h).Scan(&s.ErrorsLast24h)
+	}
 
 	// Latencia promedio (últimas 24h)
-	_ = r.pool.QueryRow(ctx, `
-		SELECT COALESCE(AVG(latency_ms), 0) FROM usage_events
-		WHERE occurred_at >= $1 AND status='success' AND latency_ms IS NOT NULL
-	`, since24h).Scan(&s.AvgLatencyMs)
+	if scoped {
+		_ = r.pool.QueryRow(ctx, `
+			SELECT COALESCE(AVG(latency_ms), 0) FROM usage_events
+			WHERE occurred_at >= $1 AND status='success' AND latency_ms IS NOT NULL AND tenant_id = ANY($2)
+		`, since24h, allowedTenantIDs).Scan(&s.AvgLatencyMs)
+	} else {
+		_ = r.pool.QueryRow(ctx, `
+			SELECT COALESCE(AVG(latency_ms), 0) FROM usage_events
+			WHERE occurred_at >= $1 AND status='success' AND latency_ms IS NOT NULL
+		`, since24h).Scan(&s.AvgLatencyMs)
+	}
 
 	// Top 5 tenants este mes
-	rows, err := r.pool.Query(ctx, `
-		SELECT m.tenant_id, t.name, m.total_requests
-		FROM monthly_usage_aggregates m
-		JOIN tenants t ON t.id=m.tenant_id
-		WHERE m.year=$1 AND m.month=$2
-		ORDER BY m.total_requests DESC LIMIT 5
-	`, y, int(m))
+	var rows pgx.Rows
+	var err error
+	if scoped {
+		rows, err = r.pool.Query(ctx, `
+			SELECT m.tenant_id, t.name, m.total_requests
+			FROM monthly_usage_aggregates m
+			JOIN tenants t ON t.id=m.tenant_id
+			WHERE m.year=$1 AND m.month=$2 AND m.tenant_id = ANY($3)
+			ORDER BY m.total_requests DESC LIMIT 5
+		`, y, int(m), allowedTenantIDs)
+	} else {
+		rows, err = r.pool.Query(ctx, `
+			SELECT m.tenant_id, t.name, m.total_requests
+			FROM monthly_usage_aggregates m
+			JOIN tenants t ON t.id=m.tenant_id
+			WHERE m.year=$1 AND m.month=$2
+			ORDER BY m.total_requests DESC LIMIT 5
+		`, y, int(m))
+	}
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {

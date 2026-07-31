@@ -217,6 +217,7 @@ type AuditEvent struct {
 	IPAddress  *string                `json:"ip_address,omitempty"`
 	UserAgent  *string                `json:"user_agent,omitempty"`
 	OccurredAt time.Time              `json:"occurred_at"`
+	TenantID   *uuid.UUID             `json:"tenant_id,omitempty"`
 }
 
 // ─── Pagination ───────────────────────────────────────────────

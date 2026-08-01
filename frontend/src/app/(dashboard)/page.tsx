@@ -60,7 +60,7 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Panel de Control</h1>
         <p className="text-sm text-gray-500 mt-1">Resumen del sistema en tiempo real</p>
       </div>
 
@@ -185,7 +185,7 @@ function SystemStatus() {
     { label: "API Backend", status: data?.status === "ready" ? "ok" : "checking" },
     { label: "PostgreSQL",  status: data?.postgres ?? "checking" },
     { label: "Redis",       status: data?.redis ?? "checking" },
-    { label: "TSA Upstream", status: "ok" }, // Se verifica via backend
+    { label: "Autoridad TSA", status: "ok" }, // Se verifica via backend
   ];
 
   return (

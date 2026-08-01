@@ -18,8 +18,8 @@ const CATEGORY_COLORS: Record<string, string> = {
 const CATEGORY_LABELS: Record<string, string> = {
   auth:     "Autenticación",
   quota:    "Cuota",
-  rate:     "Rate limit",
-  upstream: "Upstream",
+  rate:     "Límite de tasa",
+  upstream: "Servidor Upstream",
   request:  "Solicitud",
   other:    "Otro",
 };

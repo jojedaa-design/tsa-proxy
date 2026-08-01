@@ -262,7 +262,7 @@ function UpstreamCard({
           </div>
           <p className="text-sm text-gray-600 mt-1 break-all">{upstream.url}</p>
           <div className="flex gap-6 mt-2 text-xs text-gray-500">
-            <span>Timeout: {upstream.timeout_ms}ms</span>
+            <span>Tiempo de espera: {upstream.timeout_ms}ms</span>
             <span>Reintentos: {upstream.max_retries}</span>
             {upstream.username ? (
               <span>Usuario: <span className="font-mono">{upstream.username}</span> · Contraseña: {upstream.has_password ? "●●●●●●" : "—"}</span>
@@ -455,7 +455,7 @@ function UpstreamModal({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="label">Timeout (ms)</label>
+              <label className="label">Tiempo de espera (ms)</label>
               <input
                 value={timeoutMs}
                 onChange={(e) => setTimeoutMs(e.target.value)}

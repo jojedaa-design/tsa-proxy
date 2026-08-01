@@ -67,9 +67,9 @@ export default function LoginPage() {
           <Image
             src="/brand/logo-color.svg"
             alt="BIGDAVI"
-            width={220}
-            height={101}
-            className="h-14 w-auto mx-auto mb-5"
+            width={550}
+            height={253}
+            className="h-[140px] w-auto mx-auto mb-5"
             priority
             unoptimized
           />

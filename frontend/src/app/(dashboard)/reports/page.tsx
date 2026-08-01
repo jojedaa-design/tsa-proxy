@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, type FailureDetail } from "@/lib/api";
 
@@ -43,6 +43,18 @@ export default function ReportsPage() {
   });
   const [to, setTo]     = useState(() => new Date().toISOString().split("T")[0]);
   const [tenantId, setTenantId] = useState("");
+  const [isAdminOrSuperAdmin, setIsAdminOrSuperAdmin] = useState(false);
+
+  // Cargar rol del usuario para determinar si puede ver "Análisis de fallos"
+  useEffect(() => {
+    api.me().then((user) => {
+      const roles = user.roles || [];
+      const hasAdminAccess = roles.includes("admin") || roles.includes("superadmin");
+      setIsAdminOrSuperAdmin(hasAdminAccess);
+    }).catch(() => {
+      setIsAdminOrSuperAdmin(false);
+    });
+  }, []);
 
   const { data, isLoading } = useQuery({
     queryKey: ["usage-report", from, to, tenantId],
@@ -128,7 +140,8 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {/* ── Análisis de Fallos ──────────────────────────────── */}
+      {/* ── Análisis de Fallos (solo Admin/SuperAdmin) ──────────────────────────────── */}
+      {isAdminOrSuperAdmin && (
       <div className="card overflow-hidden">
         <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
           <div>
@@ -191,6 +204,7 @@ export default function ReportsPage() {
           </div>
         )}
       </div>
+      )}
 
       {/* Tabla de consumo por cliente */}
       <div className="card overflow-hidden">

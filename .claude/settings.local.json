@@ -63,7 +63,11 @@
       "Bash(ssh -i 'C:\\\\Users\\\\jesus/.ssh/qa_tsa_proxy_key' ubuntu@54.39.180.141 'head -1 /opt/qa/docker-compose.yml')",
       "Bash(ssh -i 'C:\\\\Users\\\\jesus/.ssh/encuestas' ubuntu@54.39.181.13 'head -1 /opt/tsa-proxy/docker-compose.yml')",
       "Bash(ssh -i 'C:\\\\Users\\\\jesus/.ssh/qa_tsa_proxy_key' ubuntu@54.39.180.141 'cd /opt/qa && docker compose logs backend 2>&1 | tail -200 | grep -A5 -B5 '\\\\''upstreams\\\\|upstream'\\\\''')",
-      "PowerShell(ssh -i \"C:\\\\Users\\\\jesus\\\\.ssh\\\\qa_tsa_proxy_key\" ubuntu@54.39.180.141 \"cd /opt/qa && docker compose up -d\")"
+      "PowerShell(ssh -i \"C:\\\\Users\\\\jesus\\\\.ssh\\\\qa_tsa_proxy_key\" ubuntu@54.39.180.141 \"cd /opt/qa && docker compose up -d\")",
+      "Bash(ls -d /c/dev/*/ 2>/dev/null | head -20)",
+      "Bash(find ~/.gradle/caches -name \"dss-service-6.3.jar\" 2>/dev/null | head -2; find ~/.gradle/caches -name \"dss-spi-6.3.jar\" 2>/dev/null | head -2)",
+      "Bash(curl -s -o /dev/null -w \"enviado a /ts -> HTTP %{http_code}\\\\n\" -u probe_ts_only:xyz -X POST -H \"Content-Type: application/timestamp-query\" --data-binary \"x\" \"https://qa-tsa.bigdavi.com/ts\")",
+      "Bash(curl -s --http2 -o /dev/null -w \"  version=%{http_version} code=%{http_code}\\\\n\" -u probe_h2:xyz -X POST -H \"Content-Type: application/timestamp-query\" --data-binary \"x\" \"https://qa-tsa.bigdavi.com/ts\")"
     ]
   }
 }

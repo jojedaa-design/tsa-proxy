@@ -227,8 +227,10 @@ func (h *TenantsHandler) VerifyAndDelete(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if req.TotpCode == "" {
-		apierr.WriteValidationError(w, r, map[string]string{"totp_code": "required"})
+	// Limpiar y validar el código TOTP
+	code := req.TotpCode
+	if code == "" {
+		apierr.WriteValidationError(w, r, map[string]string{"totp_code": "requerido"})
 		return
 	}
 
@@ -243,14 +245,14 @@ func (h *TenantsHandler) VerifyAndDelete(w http.ResponseWriter, r *http.Request)
 
 	// Verificar si el usuario tiene 2FA habilitado
 	if user.TOTPSecret == nil || *user.TOTPSecret == "" {
-		apierr.WriteError(w, r, apierr.ErrAdminUnauthorized)
+		apierr.WriteValidationError(w, r, map[string]string{"totp_code": "2FA no configurado"})
 		return
 	}
 
 	// Verificar el código TOTP
-	valid := totp.Validate(req.TotpCode, *user.TOTPSecret)
-	if !valid {
-		apierr.WriteValidationError(w, r, map[string]string{"totp_code": "código inválido"})
+	// totp.Validate() by default checks current and +/- 1 time window (30 sec each)
+	if !totp.Validate(code, *user.TOTPSecret) {
+		apierr.WriteValidationError(w, r, map[string]string{"totp_code": "código inválido o expirado"})
 		return
 	}
 

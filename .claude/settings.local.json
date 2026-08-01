@@ -87,7 +87,10 @@
       "Bash(curl -s -o /dev/null -w \"POST /ts sin credenciales -> HTTP %{http_code}\\\\n\" -X POST -H \"Content-Type: application/timestamp-query\" --data-binary \"x\" \"https://qa-tsa.bigdavi.com:443/ts\")",
       "Bash(curl -s -i -X POST --data-binary \"x\" \"https://qa-tsa.bigdavi.com/ts\")",
       "Bash(git commit -q -m ' *)",
-      "Bash(xargs -n1 basename)"
+      "Bash(xargs -n1 basename)",
+      "Bash(ssh prod-tsa *)",
+      "Bash(ssh prod-tsa 'docker exec tsa_postgres psql -U tsaproxy -d tsaproxy -c \" *)",
+      "Bash(git commit -q -m 'feat: make initial bundle amount configurable on client creation *)"
     ]
   }
 }

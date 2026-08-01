@@ -267,6 +267,8 @@ function CreateTenantWizard({ onClose, onCreated }: {
   const [ipInput, setIpInput] = useState("");
   const [ipLabel, setIpLabel] = useState("");
   const [allowAllIPs, setAllowAllIPs] = useState(false);
+  const [initialBundleAmount, setInitialBundleAmount] = useState("1000");
+  const [burstPerMinute, setBurstPerMinute] = useState("10");
 
   // Resultado
   const [result, setResult] = useState<CreationResult | null>(null);
@@ -313,17 +315,17 @@ function CreateTenantWizard({ onClose, onCreated }: {
       }
 
       // 4. Crear bolsa inicial y configurar ritmo
-      const monthlyLimit = 1000;
-      const burstPerMinute = 10;
+      const bundleAmount = parseInt(initialBundleAmount) || 1000;
+      const burst = parseInt(burstPerMinute) || 10;
       await api.addBundle(tenant.id, {
-        amount: monthlyLimit,
+        amount: bundleAmount,
         note: "Bolsa inicial",
       });
       await api.updateQuota(tenant.id, {
-        burst_per_minute: burstPerMinute,
+        burst_per_minute: burst,
       });
 
-      setResult({ tenant, credential, ips: ipEntries, monthlyLimit, burstPerMinute });
+      setResult({ tenant, credential, ips: ipEntries, monthlyLimit: bundleAmount, burstPerMinute: burst });
       setStep("result");
     } catch (err: any) {
       setError(err?.message || err?.error || "Error al crear el cliente. Verificá los datos e intentá nuevamente.");
@@ -403,6 +405,37 @@ function CreateTenantWizard({ onClose, onCreated }: {
                   )}
                 </>
               )}
+            </div>
+
+            {/* Configuración de bolsa y ritmo */}
+            <div className="border-t pt-4">
+              <h3 className="text-sm font-semibold text-gray-800 mb-4">Configuración de bolsa</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">Sellos iniciales *</label>
+                  <input
+                    type="number"
+                    value={initialBundleAmount}
+                    onChange={e => setInitialBundleAmount(e.target.value)}
+                    className="input"
+                    placeholder="1000"
+                    min="1"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">cantidad de sellos en la bolsa inicial</p>
+                </div>
+                <div>
+                  <label className="label">Sellos por minuto *</label>
+                  <input
+                    type="number"
+                    value={burstPerMinute}
+                    onChange={e => setBurstPerMinute(e.target.value)}
+                    className="input"
+                    placeholder="10"
+                    min="1"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">máximo por minuto</p>
+                </div>
+              </div>
             </div>
 
             {error && <div className="text-sm text-red-600 bg-red-50 rounded p-2">{error}</div>}

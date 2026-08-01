@@ -750,17 +750,17 @@ function QuotaForm({ tenantId, initialQuota }: {
             <table className="w-full text-sm">
               <thead className="border-b">
                 <tr>
-                  <th className="text-left py-2">Fecha</th>
-                  <th className="text-right py-2">Cantidad</th>
-                  <th className="text-left py-2">Referencia</th>
+                  <th className="text-left py-3 pr-4">Fecha</th>
+                  <th className="text-right py-3 px-4">Cantidad</th>
+                  <th className="text-left py-3 pl-4">Referencia</th>
                 </tr>
               </thead>
               <tbody>
                 {bundles.map((b) => (
                   <tr key={b.id} className="border-b">
-                    <td className="py-2">{new Date(b.contracted_at).toLocaleDateString()}</td>
-                    <td className="text-right font-medium">{b.amount}</td>
-                    <td className="text-gray-600">{b.note || "—"}</td>
+                    <td className="py-3 pr-4">{new Date(b.contracted_at).toLocaleDateString()}</td>
+                    <td className="text-right font-medium py-3 px-4">{b.amount}</td>
+                    <td className="text-gray-600 py-3 pl-4">{b.note || "—"}</td>
                   </tr>
                 ))}
               </tbody>

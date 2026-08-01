@@ -146,6 +146,7 @@ func NewRouter(d *Deps) http.Handler {
 						r.Delete("/", d.AdminTenants.Delete)
 						r.Post("/suspend",    d.AdminTenants.Suspend)
 						r.Post("/reactivate", d.AdminTenants.Reactivate)
+						r.Post("/verify-delete", d.AdminTenants.VerifyAndDelete)
 
 						// Sub-recursos del tenant
 						r.Get("/credentials",  d.AdminCredentials.ListByTenant)

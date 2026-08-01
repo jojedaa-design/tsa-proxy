@@ -430,6 +430,13 @@ export const api = {
     return apiFetch(`/api/admin/v1/tenants/${id}`, { method: "DELETE" });
   },
 
+  async verifyAndDeleteTenant(id: string, totpCode: string) {
+    return apiFetch(`/api/admin/v1/tenants/${id}/verify-delete`, {
+      method: "POST",
+      body: JSON.stringify({ totp_code: totpCode }),
+    });
+  },
+
   // Credentials
   async listCredentials(tenantId: string) {
     return apiFetch<{ data: APICredential[] }>(

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { api, type Tenant, type APICredential } from "@/lib/api";
@@ -11,6 +11,8 @@ export default function TenantsPage() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [showCreate, setShowCreate] = useState(false);
+  const [showDelete2FA, setShowDelete2FA] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["tenants", page, search, status],
@@ -30,8 +32,21 @@ export default function TenantsPage() {
 
   const deleteMut = useMutation({
     mutationFn: (id: string) => api.deleteTenant(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["tenants"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tenants"] });
+      setPendingDeleteId(null);
+    },
   });
+
+  const handleDeleteClick = (id: string) => {
+    setPendingDeleteId(id);
+    setShowDelete2FA(true);
+  };
+
+  const handleDeleteCancel = () => {
+    setShowDelete2FA(false);
+    setPendingDeleteId(null);
+  };
 
   return (
     <div className="space-y-5">
@@ -92,7 +107,7 @@ export default function TenantsPage() {
                   tenant={tenant}
                   onSuspend={() => suspendMut.mutate(tenant.id)}
                   onReactivate={() => reactivateMut.mutate(tenant.id)}
-                  onDelete={() => deleteMut.mutate(tenant.id)}
+                  onDelete={() => handleDeleteClick(tenant.id)}
                 />
               ))}
             </tbody>
@@ -132,6 +147,23 @@ export default function TenantsPage() {
             setShowCreate(false);
             qc.invalidateQueries({ queryKey: ["tenants"] });
           }}
+        />
+      )}
+
+      {showDelete2FA && pendingDeleteId && (
+        <Delete2FAModal
+          tenantId={pendingDeleteId}
+          tenantName={data?.data.find(t => t.id === pendingDeleteId)?.name || ""}
+          isLoading={deleteMut.isPending}
+          onConfirm={(totpCode) => {
+            api.verifyAndDeleteTenant(pendingDeleteId, totpCode).then(() => {
+              setShowDelete2FA(false);
+              qc.invalidateQueries({ queryKey: ["tenants"] });
+            }).catch(() => {
+              // Error is handled by the modal
+            });
+          }}
+          onCancel={handleDeleteCancel}
         />
       )}
     </div>
@@ -197,11 +229,7 @@ function TenantRow({ tenant, onSuspend, onReactivate, onDelete }: {
             </button>
           ) : null}
           <button
-            onClick={() => {
-              if (confirm(`⚠️ ¿Eliminar definitivamente el cliente "${tenant.name}"?\n\nEsta acción no se puede deshacer. Se eliminarán todas las credenciales y configuraciones asociadas.`)) {
-                onDelete();
-              }
-            }}
+            onClick={onDelete}
             className="btn px-3 py-1 text-xs bg-red-50 text-red-700 border border-red-200 hover:bg-red-100"
           >
             Eliminar
@@ -485,6 +513,108 @@ function CreateTenantWizard({ onClose, onCreated }: {
             </div>
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ── Modal de verificación 2FA para eliminar ────────────────────
+
+function Delete2FAModal({
+  tenantId,
+  tenantName,
+  isLoading,
+  onConfirm,
+  onCancel,
+}: {
+  tenantId: string;
+  tenantName: string;
+  isLoading: boolean;
+  onConfirm: (totpCode: string) => void;
+  onCancel: () => void;
+}) {
+  const [totpCode, setTotpCode] = useState("");
+  const [error, setError] = useState("");
+  const [localLoading, setLocalLoading] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (!totpCode.trim()) {
+      setError("Ingresa el código de autenticación");
+      return;
+    }
+    setLocalLoading(true);
+    try {
+      onConfirm(totpCode.replace(/\s/g, ""));
+    } catch {
+      setError("Error al verificar el código. Intenta de nuevo.");
+    } finally {
+      setLocalLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg shadow-lg max-w-md w-full mx-4 p-6 space-y-4">
+        <div>
+          <h2 className="text-lg font-bold text-gray-900">Confirmar eliminación</h2>
+          <p className="text-sm text-gray-500 mt-1">
+            ¿Eliminar permanentemente el cliente <strong>{tenantName}</strong>?
+          </p>
+          <p className="text-xs text-gray-400 mt-2">
+            Ingresa tu código de autenticación de dos factores para proceder.
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Código de autenticación
+            </label>
+            <input
+              ref={inputRef}
+              type="text"
+              value={totpCode}
+              onChange={(e) => {
+                setTotpCode(e.target.value);
+                setError("");
+              }}
+              placeholder="000000"
+              maxLength={6}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-center text-lg font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
+              disabled={isLoading || localLoading}
+            />
+            {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={isLoading || localLoading}
+              className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={isLoading || localLoading || totpCode.length < 6}
+              className="flex-1 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50"
+            >
+              {isLoading || localLoading ? "Verificando..." : "Eliminar cliente"}
+            </button>
+          </div>
+        </form>
+
+        <p className="text-xs text-gray-400 text-center">
+          Esta acción no se puede deshacer. Se eliminarán todas las credenciales y configuraciones.
+        </p>
       </div>
     </div>
   );

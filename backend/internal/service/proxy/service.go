@@ -127,7 +127,7 @@ func (s *Service) Process(ctx context.Context, req *Request) (*Result, *apierr.A
 			reason := "quota_exceeded"
 			reqSize := req.RequestSize
 			go s.recordUsage(context.Background(), req, model.UsageStatusRejected, &reason,
-				nil, nil, nil, &reqSize, nil)
+				nil, nil, nil, &reqSize, nil, false)
 			return nil, apierr.ErrQuotaExceeded
 		}
 	}
@@ -200,15 +200,25 @@ func (s *Service) Process(ctx context.Context, req *Request) (*Result, *apierr.A
 		responseSize = &size
 	}
 
+	// Detectar si el uso excede la bolsa contratada (sin hard limit)
+	exceedsQuota := false
+	if quota != nil && !quota.HardLimit && quota.MonthlyLimit > 0 {
+		monthKey := int(month)
+		pgUsage, _ := s.quotaRepo.GetMonthlyUsage(ctx, req.TenantID, year, monthKey)
+		if pgUsage >= quota.MonthlyLimit && usageStatus == model.UsageStatusSuccess {
+			exceedsQuota = true
+		}
+	}
+
 	reqSize := req.RequestSize
 	if s.cfg.Proxy.UsageRecordAsync {
 		go s.recordUsage(context.Background(), req, usageStatus, rejectionReason,
 			httpStatus, &totalLatencyMs, &upstreamLatencyMs,
-			&reqSize, responseSize)
+			&reqSize, responseSize, exceedsQuota)
 	} else {
 		s.recordUsage(ctx, req, usageStatus, rejectionReason,
 			httpStatus, &totalLatencyMs, &upstreamLatencyMs,
-			&reqSize, responseSize)
+			&reqSize, responseSize, exceedsQuota)
 	}
 
 	if upstreamErr != nil {
@@ -242,6 +252,7 @@ func (s *Service) recordUsage(
 	upstreamLatencyMs *int,
 	requestSize *int,
 	responseSize *int,
+	exceedsQuota bool,
 ) {
 	now := time.Now()
 	credID := req.CredentialID
@@ -284,6 +295,7 @@ func (s *Service) recordUsage(
 		RequestSizeBytes:  requestSize,
 		ResponseSizeBytes: responseSize,
 		UserAgent:         &userAgent,
+		ExceedsQuota:      exceedsQuota,
 		OccurredAt:        now,
 	}
 

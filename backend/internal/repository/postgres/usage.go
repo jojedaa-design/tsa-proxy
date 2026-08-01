@@ -27,13 +27,13 @@ func (r *UsageRepository) InsertEvent(ctx context.Context, e *model.UsageEvent) 
 		  (id, tenant_id, credential_id, request_id, source_ip, status,
 		   rejection_reason, upstream_status, latency_ms, upstream_latency_ms,
 		   request_size_bytes, response_size_bytes, tsa_upstream_id,
-		   user_agent, geo_country, geo_city, geo_asn, occurred_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+		   user_agent, geo_country, geo_city, geo_asn, exceeds_quota, occurred_at)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
 	`,
 		e.ID, e.TenantID, e.CredentialID, e.RequestID, e.SourceIP, e.Status,
 		e.RejectionReason, e.UpstreamStatus, e.LatencyMs, e.UpstreamLatencyMs,
 		e.RequestSizeBytes, e.ResponseSizeBytes, e.TSAUpstreamID,
-		e.UserAgent, e.GeoCountry, e.GeoCity, e.GeoASN, e.OccurredAt,
+		e.UserAgent, e.GeoCountry, e.GeoCity, e.GeoASN, e.ExceedsQuota, e.OccurredAt,
 	)
 	return err
 }

@@ -175,6 +175,7 @@ type UsageEvent struct {
 	GeoCountry         *string     `json:"geo_country,omitempty"`
 	GeoCity            *string     `json:"geo_city,omitempty"`
 	GeoASN             *string     `json:"geo_asn,omitempty"`
+	ExceedsQuota       bool        `json:"exceeds_quota"`
 	OccurredAt         time.Time   `json:"occurred_at"`
 }
 

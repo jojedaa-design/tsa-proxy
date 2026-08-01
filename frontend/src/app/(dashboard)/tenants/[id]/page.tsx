@@ -684,35 +684,15 @@ function QuotaForm({ tenantId, initialQuota }: {
 
   return (
     <div className="card p-6 max-w-lg space-y-5">
-      <h2 className="text-base font-semibold text-gray-900">Configuración de cuota</h2>
+      <h2 className="text-base font-semibold text-gray-900">Configuración de bolsa contratada</h2>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="label">Límite mensual</label>
-          <input value={monthly} onChange={(e) => setMonthly(e.target.value)} className="input" type="number" min="1" />
-          <p className="text-xs text-gray-400 mt-1">sellos por mes</p>
-        </div>
-        <div>
-          <label className="label">Burst por minuto</label>
-          <input value={burst} onChange={(e) => setBurst(e.target.value)} className="input" type="number" min="1" />
-          <p className="text-xs text-gray-400 mt-1">máx. requests / minuto</p>
-        </div>
+      <div>
+        <label className="label">Saldo disponible (requests/minuto)</label>
+        <input value={burst} onChange={(e) => setBurst(e.target.value)} className="input" type="number" min="1" />
+        <p className="text-xs text-gray-400 mt-1">máx. requests / minuto</p>
       </div>
 
       <div className="space-y-3">
-        <label className="flex items-center gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={hardLimit}
-            onChange={(e) => setHardLimit(e.target.checked)}
-            className="w-4 h-4 rounded border-gray-300 text-primary-600"
-          />
-          <div>
-            <span className="text-sm font-medium text-gray-700">Límite estricto (hard limit)</span>
-            <p className="text-xs text-gray-400">Rechaza requests cuando se agota la cuota</p>
-          </div>
-        </label>
-
         <label className="flex items-center gap-3 cursor-pointer">
           <input
             type="checkbox"
@@ -722,14 +702,14 @@ function QuotaForm({ tenantId, initialQuota }: {
           />
           <div>
             <span className="text-sm font-medium text-gray-700">Suspender automáticamente</span>
-            <p className="text-xs text-gray-400">Suspende el cliente al agotar la cuota mensual</p>
+            <p className="text-xs text-gray-400">Suspende el cliente al agotar la bolsa contratada</p>
           </div>
         </label>
       </div>
 
       <div className="flex items-center gap-3">
         <button onClick={() => mut.mutate()} disabled={mut.isPending} className="btn-primary">
-          {mut.isPending ? "Guardando..." : "Guardar cuota"}
+          {mut.isPending ? "Guardando..." : "Guardar configuración"}
         </button>
         {saved && <span className="text-sm text-green-600">✓ Guardado</span>}
       </div>

@@ -318,7 +318,11 @@ function CreateTenantWizard({ onClose, onCreated }: {
       await api.updateQuota(tenant.id, {
         monthly_limit: monthlyLimit,
         burst_per_minute: burstPerMinute,
-        hard_limit: true,
+        // Sin suspensión automática, la bolsa no corta el consumo: el exceso se
+        // registra (exceeds_quota) pero se siguen emitiendo sellos. Ambos flags
+        // van juntos para que el cliente no quede bloqueado por un hard_limit
+        // que no es visible ni editable en el panel.
+        hard_limit: false,
         auto_suspend: false,
         reset_day: 1,
       });

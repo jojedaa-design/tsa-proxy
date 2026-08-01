@@ -67,7 +67,26 @@
       "Bash(ls -d /c/dev/*/ 2>/dev/null | head -20)",
       "Bash(find ~/.gradle/caches -name \"dss-service-6.3.jar\" 2>/dev/null | head -2; find ~/.gradle/caches -name \"dss-spi-6.3.jar\" 2>/dev/null | head -2)",
       "Bash(curl -s -o /dev/null -w \"enviado a /ts -> HTTP %{http_code}\\\\n\" -u probe_ts_only:xyz -X POST -H \"Content-Type: application/timestamp-query\" --data-binary \"x\" \"https://qa-tsa.bigdavi.com/ts\")",
-      "Bash(curl -s --http2 -o /dev/null -w \"  version=%{http_version} code=%{http_code}\\\\n\" -u probe_h2:xyz -X POST -H \"Content-Type: application/timestamp-query\" --data-binary \"x\" \"https://qa-tsa.bigdavi.com/ts\")"
+      "Bash(curl -s --http2 -o /dev/null -w \"  version=%{http_version} code=%{http_code}\\\\n\" -u probe_h2:xyz -X POST -H \"Content-Type: application/timestamp-query\" --data-binary \"x\" \"https://qa-tsa.bigdavi.com/ts\")",
+      "Bash(curl -s -o /dev/null -w \"  /ts -> HTTP %{http_code}\\\\n\" -u probe_post_reload:xyz -X POST -H \"Content-Type: application/timestamp-query\" --data-binary \"x\" \"https://qa-tsa.bigdavi.com/ts\")",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}  \\(version %{http_version}\\)\\\\n\" -u 'bigdavi003:tsp_ba_d77fdcfb826aa5adbec3a6fdd9c84b97' -X POST -H \"Content-Type: application/timestamp-query\" --data-binary \"x\" \"https://qa-tsa.bigdavi.com/ts\")",
+      "Bash(curl -s -o /dev/null -w \"intento 2: HTTP %{http_code}\\\\n\" -u 'bigdavi003:tsp_ba_d77fdcfb826aa5adbec3a6fdd9c84b97' -X POST -H \"Content-Type: application/timestamp-query\" --data-binary \"x\" \"https://qa-tsa.bigdavi.com/ts\")",
+      "Bash(mkdir -p /c/Users/jesus/AppData/Local/Temp/claude/C--dev-tsa-proxy/ff0a9a86-e3a9-4c29-90c1-f63e6a50789f/scratchpad/dss)",
+      "Read(//c/Users/jesus/AppData/Local/Temp/claude/C--dev-tsa-proxy/ff0a9a86-e3a9-4c29-90c1-f63e6a50789f/scratchpad/**)",
+      "Bash(unzip -o -q /c/Users/jesus/.gradle/caches/modules-2/files-2.1/eu.europa.ec.joinup.sd-dss/dss-service/6.3/*/dss-service-6.3.jar 'eu/europa/esig/dss/service/http/commons/CommonsDataLoader.class')",
+      "Bash(javap -p -c eu/europa/esig/dss/service/http/commons/CommonsDataLoader.class)",
+      "Bash(SP=\"/c/Users/jesus/AppData/Local/Temp/claude/C--dev-tsa-proxy/ff0a9a86-e3a9-4c29-90c1-f63e6a50789f/scratchpad/dss\"; grep -n \"addAuthentication\\\\|AuthScope\\\\|BasicAuthCache\\\\|AuthCache\\\\|setPreemptive\\\\|HttpHost\" \"$SP/cdl.txt\" | head -40)",
+      "Bash(unzip -o -q /c/Users/jesus/.gradle/caches/modules-2/files-2.1/eu.europa.ec.joinup.sd-dss/dss-service/6.3/*/dss-service-6.3.jar 'eu/europa/esig/dss/service/http/commons/TimestampDataLoader.class')",
+      "Bash(javap -p eu/europa/esig/dss/service/http/commons/TimestampDataLoader.class)",
+      "Bash(unzip -o -q /c/Users/jesus/.gradle/caches/modules-2/files-2.1/eu.europa.ec.joinup.sd-dss/dss-service/6.3/*/dss-service-6.3.jar 'eu/europa/esig/dss/service/http/commons/HostConnection.class')",
+      "Bash(javap -p -c eu/europa/esig/dss/service/http/commons/HostConnection.class)",
+      "Bash(./gradlew compileJava --console=plain -q)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(curl -s -o /dev/null -w \"  HTTP %{http_code}\\\\n\" -u 'bigdavi003:tsp_ba_d77fdcfb826aa5adbec3a6fdd9c84b97' -X POST -H \"Content-Type: application/timestamp-query\" --data-binary \"x\" \"https://qa-tsa.bigdavi.com/ts\")",
+      "Bash(javap -p /c/Users/jesus/AppData/Local/Temp/claude/C--dev-tsa-proxy/ff0a9a86-e3a9-4c29-90c1-f63e6a50789f/scratchpad/dss/eu/europa/esig/dss/service/http/commons/HostConnection.class)",
+      "Bash(curl -s -o /dev/null -w \"POST /ts sin credenciales -> HTTP %{http_code}\\\\n\" -X POST -H \"Content-Type: application/timestamp-query\" --data-binary \"x\" \"https://qa-tsa.bigdavi.com:443/ts\")",
+      "Bash(curl -s -i -X POST --data-binary \"x\" \"https://qa-tsa.bigdavi.com/ts\")",
+      "Bash(git commit -q -m ' *)"
     ]
   }
 }

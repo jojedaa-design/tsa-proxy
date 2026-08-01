@@ -663,7 +663,6 @@ function QuotaForm({ tenantId, initialQuota }: {
   const qc = useQueryClient();
   const [monthly, setMonthly] = useState(String(initialQuota.monthly_limit));
   const [burst, setBurst] = useState(String(initialQuota.burst_per_minute));
-  const [hardLimit, setHardLimit] = useState(initialQuota.hard_limit);
   const [autoSuspend, setAutoSuspend] = useState(initialQuota.auto_suspend);
   const [saved, setSaved] = useState(false);
 
@@ -671,7 +670,10 @@ function QuotaForm({ tenantId, initialQuota }: {
     mutationFn: () => api.updateQuota(tenantId, {
       monthly_limit: parseInt(monthly),
       burst_per_minute: parseInt(burst),
-      hard_limit: hardLimit,
+      // "Suspender automáticamente" es el único control de la bolsa en la UI, así
+      // que gobierna también hard_limit: activado corta al agotarla; desactivado
+      // permite seguir consumiendo y el exceso queda marcado en exceeds_quota.
+      hard_limit: autoSuspend,
       auto_suspend: autoSuspend,
       reset_day: initialQuota.reset_day,
     }),

@@ -83,7 +83,6 @@ func NewService(
 // 4. Devolver la respuesta
 func (s *Service) Process(ctx context.Context, req *Request) (*Result, *apierr.APIError) {
 	start := time.Now()
-	now := time.Now()
 
 	// ── 1. Validar bolsa de sellos ────────────────────────────
 	// Modelo de bolsa: contratado = SUM(quota_bundles), consumido = SUM(monthly_usage_aggregates)

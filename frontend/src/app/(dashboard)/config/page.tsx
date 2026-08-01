@@ -86,7 +86,7 @@ export default function ConfigPage() {
 /* ── Sección de 2FA ──────────────────────────────────────────── */
 
 function TwoFactorSection() {
-  const [phase, setPhase] = useState<"idle" | "setup" | "disable">("idle");
+  const [phase, setPhase] = useState<"idle" | "setup">("idle");
   const [qrDataUrl, setQrDataUrl] = useState("");
   const [secret, setSecret] = useState("");
   const [code, setCode] = useState("");
@@ -109,17 +109,6 @@ function TwoFactorSection() {
     mutationFn: () => api.enable2FA(code),
     onSuccess: () => {
       setSuccess("Autenticación en dos pasos activada correctamente.");
-      setPhase("idle");
-      setCode("");
-      refetchMe();
-    },
-    onError: () => setError("Código incorrecto. Verifica tu aplicación."),
-  });
-
-  const disableMut = useMutation({
-    mutationFn: () => api.disable2FA(code),
-    onSuccess: () => {
-      setSuccess("Autenticación en dos pasos desactivada.");
       setPhase("idle");
       setCode("");
       refetchMe();
@@ -172,12 +161,10 @@ function TwoFactorSection() {
               Activar autenticación en dos pasos
             </button>
           ) : (
-            <button
-              onClick={() => { setPhase("disable"); setError(""); setSuccess(""); setCode(""); }}
-              className="btn px-4 py-2 text-sm bg-red-50 text-red-700 border border-red-200 hover:bg-red-100"
-            >
-              Desactivar 2FA
-            </button>
+            <p className="text-sm text-gray-500">
+              La autenticación en dos pasos es obligatoria y no puede desactivarse por tu cuenta.
+              Si perdiste tu dispositivo, contactá a un administrador para restablecerla.
+            </p>
           )}
         </div>
       )}
@@ -235,36 +222,6 @@ function TwoFactorSection() {
         </div>
       )}
 
-      {phase === "disable" && (
-        <div className="space-y-4 max-w-xs">
-          <p className="text-sm text-gray-700">
-            Ingresá el código actual de tu aplicación para confirmar la desactivación:
-          </p>
-          <input
-            type="text"
-            inputMode="numeric"
-            maxLength={6}
-            value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-            className="input text-center text-xl tracking-[0.4em] font-mono"
-            placeholder="000000"
-            autoFocus
-          />
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          <div className="flex gap-3">
-            <button
-              onClick={() => disableMut.mutate()}
-              disabled={code.length < 6 || disableMut.isPending}
-              className="btn px-4 py-2 text-sm bg-red-50 text-red-700 border border-red-200 hover:bg-red-100"
-            >
-              {disableMut.isPending ? "Desactivando..." : "Confirmar desactivación"}
-            </button>
-            <button onClick={() => { setPhase("idle"); setCode(""); setError(""); }} className="btn-secondary text-sm">
-              Cancelar
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -559,6 +516,11 @@ function UsersSection() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["platform-users"] }),
   });
 
+  const resetTOTPMut = useMutation({
+    mutationFn: (id: string) => api.resetUserTOTP(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["platform-users"] }),
+  });
+
   return (
     <div className="card p-6">
       <div className="flex items-center justify-between mb-4">
@@ -607,6 +569,19 @@ function UsersSection() {
                   >
                     Editar
                   </button>
+                  {u.totp_enabled && (
+                    <button
+                      onClick={() => {
+                        if (confirm(`¿Restablecer 2FA de ${u.username}? Deberá configurarlo de nuevo en su próximo inicio de sesión.`)) {
+                          resetTOTPMut.mutate(u.id);
+                        }
+                      }}
+                      disabled={resetTOTPMut.isPending}
+                      className="btn-secondary text-xs px-3 py-1"
+                    >
+                      Restablecer 2FA
+                    </button>
+                  )}
                   <button
                     onClick={() => {
                       if (confirm(`¿Eliminar al usuario ${u.username}?`)) deleteMut.mutate(u.id);

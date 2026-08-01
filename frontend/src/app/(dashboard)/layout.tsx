@@ -27,6 +27,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       return;
     }
     api.me().then((user) => {
+      // 2FA obligatorio: si por algún motivo se llega al panel sin tenerlo
+      // activo (p.ej. un JWT emitido antes de este cambio), forzar re-login
+      // — Login() ahora bloquea con totp_setup_required hasta completarlo.
+      if (!user.totp_enabled) {
+        router.push("/login");
+        return;
+      }
       setUsername(user.username);
       setRole(user.roles?.[0] ?? null);
     }).catch(() => {

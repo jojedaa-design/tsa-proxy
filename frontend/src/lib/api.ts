@@ -186,6 +186,8 @@ export interface LoginResponse {
   user?: { id: string; username: string; email: string; roles: string[]; tenant_scope?: string[] };
   mfa_required?: boolean;
   mfa_token?: string;
+  totp_setup_required?: boolean;
+  setup_token?: string;
 }
 
 export interface PlatformUser {
@@ -259,8 +261,18 @@ async function apiFetch<T>(
 
   const res = await fetch(`${BASE_URL}${path}`, { ...options, headers });
 
-  // Refresh automático si el token expiró
-  if (res.status === 401 && path !== "/api/admin/v1/auth/login") {
+  // Refresh automático si el token expiró — no aplica a endpoints que no usan
+  // Bearer (login, verificación de código MFA y el flujo de setup obligatorio
+  // de 2FA identifican al usuario con un token propio en el body); un 401 ahí
+  // es un error normal (credenciales/código inválido) a mostrar inline, no una
+  // sesión expirada.
+  const noBearerAuthEndpoints = [
+    "/api/admin/v1/auth/login",
+    "/api/admin/v1/auth/2fa/verify",
+    "/api/admin/v1/auth/2fa/setup-required",
+    "/api/admin/v1/auth/2fa/complete-setup",
+  ];
+  if (res.status === 401 && !noBearerAuthEndpoints.includes(path)) {
     const refreshed = await tryRefresh();
     if (refreshed) {
       headers["Authorization"] = `Bearer ${getToken()}`;
@@ -339,11 +351,23 @@ export const api = {
     });
   },
 
-  async disable2FA(code: string): Promise<void> {
-    await apiFetch("/api/admin/v1/auth/2fa/disable", {
+  // 2FA obligatorio: flujo de setup forzado en el login (usuario sin sesión).
+  async setupTOTPForLogin(setupToken: string): Promise<{ secret: string; qr_url: string }> {
+    return apiFetch("/api/admin/v1/auth/2fa/setup-required", {
       method: "POST",
-      body: JSON.stringify({ code }),
+      body: JSON.stringify({ setup_token: setupToken }),
     });
+  },
+
+  async completeTOTPSetup(setupToken: string, code: string): Promise<LoginResponse> {
+    const data = await apiFetch<LoginResponse>("/api/admin/v1/auth/2fa/complete-setup", {
+      method: "POST",
+      body: JSON.stringify({ setup_token: setupToken, code }),
+    });
+    if (data.access_token) {
+      setToken(data.access_token);
+    }
+    return data;
   },
 
   async logout() {
@@ -353,7 +377,8 @@ export const api = {
 
   async me() {
     return apiFetch<{
-      id: string; username: string; email: string; roles: string[]; tenant_scope?: string[];
+      id: string; username: string; email: string; roles: string[];
+      tenant_scope?: string[]; totp_enabled: boolean;
     }>("/api/admin/v1/auth/me");
   },
 
@@ -634,6 +659,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ password }),
     });
+  },
+
+  async resetUserTOTP(id: string) {
+    return apiFetch(`/api/admin/v1/users/${id}/reset-2fa`, { method: "POST" });
   },
 
   async listRoles() {

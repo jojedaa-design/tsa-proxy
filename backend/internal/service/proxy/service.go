@@ -84,7 +84,6 @@ func NewService(
 func (s *Service) Process(ctx context.Context, req *Request) (*Result, *apierr.APIError) {
 	start := time.Now()
 	now := time.Now()
-	year, month, _ := now.Date()
 
 	// ── 1. Validar bolsa de sellos ────────────────────────────
 	// Modelo de bolsa: contratado = SUM(quota_bundles), consumido = SUM(monthly_usage_aggregates)
@@ -305,28 +304,6 @@ func (s *Service) recordUsage(
 
 	// Actualizar last_used en credencial
 	s.credRepo.UpdateLastUsed(ctx, req.CredentialID, req.SourceIP)
-}
-
-func (s *Service) handleQuotaExceeded(
-	ctx context.Context,
-	req *Request,
-	quota *model.TenantQuota,
-	year, month int,
-) {
-	log.Warn().
-		Str("tenant_id", req.TenantID.String()).
-		Int("year", year).
-		Int("month", month).
-		Msg("quota exceeded")
-
-	// Si auto_suspend está activo, suspender el tenant
-	if quota.AutoSuspend {
-		log.Warn().
-			Str("tenant_id", req.TenantID.String()).
-			Msg("auto-suspending tenant due to quota exceeded")
-		// La suspensión real se hace en el tenant service para evitar
-		// dependencia circular; aquí solo logueamos
-	}
 }
 
 // resolveUpstreamCredentials obtiene usuario y contraseña para el upstream.

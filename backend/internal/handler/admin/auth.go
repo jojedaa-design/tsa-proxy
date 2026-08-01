@@ -59,6 +59,16 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 2FA es obligatorio: si el usuario aún no lo activó, no se emite sesión —
+	// debe completar el setup con setup_token antes de poder continuar.
+	if result.TOTPSetupRequired {
+		apierr.WriteJSON(w, http.StatusOK, map[string]interface{}{
+			"totp_setup_required": true,
+			"setup_token":         result.SetupToken,
+		})
+		return
+	}
+
 	h.setRefreshCookie(w, result.RefreshToken)
 	apierr.WriteJSON(w, http.StatusOK, map[string]interface{}{
 		"access_token": result.AccessToken,
@@ -163,29 +173,68 @@ func (h *AuthHandler) EnableTOTP(w http.ResponseWriter, r *http.Request) {
 	apierr.WriteJSON(w, http.StatusOK, map[string]string{"status": "2fa_enabled"})
 }
 
-// DisableTOTP desactiva 2FA verificando el código actual.
-// POST /api/admin/v1/auth/2fa/disable
-func (h *AuthHandler) DisableTOTP(w http.ResponseWriter, r *http.Request) {
-	userID, ok := middleware.GetAdminUserID(r.Context())
-	if !ok {
-		apierr.WriteError(w, r, apierr.ErrAdminUnauthorized)
-		return
-	}
-
+// SetupTOTPForLogin genera el secreto TOTP pendiente para un usuario que aún no
+// tiene 2FA, usando el setup_token emitido por Login (sin JWT — el usuario
+// todavía no tiene sesión).
+// POST /api/admin/v1/auth/2fa/setup-required
+func (h *AuthHandler) SetupTOTPForLogin(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Code string `json:"code"`
+		SetupToken string `json:"setup_token"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Code == "" {
-		apierr.WriteValidationError(w, r, map[string]string{"code": "required"})
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.SetupToken == "" {
+		apierr.WriteValidationError(w, r, map[string]string{"setup_token": "required"})
 		return
 	}
 
-	if err := h.svc.DisableTOTP(r.Context(), userID, req.Code); err != nil {
+	setup, err := h.svc.SetupTOTPWithToken(r.Context(), req.SetupToken)
+	if err != nil {
 		apierr.WriteError(w, r, apierr.ErrAdminUnauthorized)
 		return
 	}
 
-	apierr.WriteJSON(w, http.StatusOK, map[string]string{"status": "2fa_disabled"})
+	apierr.WriteJSON(w, http.StatusOK, map[string]interface{}{
+		"secret": setup.Secret,
+		"qr_url": setup.QRCodeURL,
+	})
+}
+
+// CompleteTOTPSetup activa 2FA y completa el login en un solo paso — usado en
+// el flujo de setup obligatorio (usuario sin sesión todavía).
+// POST /api/admin/v1/auth/2fa/complete-setup
+func (h *AuthHandler) CompleteTOTPSetup(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		SetupToken string `json:"setup_token"`
+		Code       string `json:"code"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierr.WriteError(w, r, apierr.ErrBadRequest)
+		return
+	}
+	if req.SetupToken == "" || req.Code == "" {
+		apierr.WriteValidationError(w, r, map[string]string{
+			"setup_token": "required",
+			"code":        "required",
+		})
+		return
+	}
+
+	result, err := h.svc.CompleteTOTPSetup(r.Context(), req.SetupToken, req.Code)
+	if err != nil {
+		apierr.WriteError(w, r, apierr.ErrAdminUnauthorized)
+		return
+	}
+
+	h.setRefreshCookie(w, result.RefreshToken)
+	apierr.WriteJSON(w, http.StatusOK, map[string]interface{}{
+		"access_token": result.AccessToken,
+		"expires_in":   result.ExpiresIn,
+		"user": map[string]interface{}{
+			"id":       result.User.ID,
+			"username": result.User.Username,
+			"email":    result.User.Email,
+			"roles":    result.User.Roles,
+		},
+	})
 }
 
 func (h *AuthHandler) setRefreshCookie(w http.ResponseWriter, token string) {

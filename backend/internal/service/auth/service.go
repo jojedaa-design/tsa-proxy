@@ -56,6 +56,11 @@ type LoginResult struct {
 	// Si TOTPRequired=true, los tokens están vacíos y hay que continuar con VerifyTOTP
 	TOTPRequired bool
 	MFAToken     string
+	// Si TOTPSetupRequired=true, el usuario aún no tiene 2FA activo (obligatorio) y
+	// debe completar el setup con SetupTOTPWithToken + CompleteTOTPSetup antes de
+	// obtener una sesión.
+	TOTPSetupRequired bool
+	SetupToken        string
 }
 
 // TOTPSetup contiene los datos para configurar 2FA.
@@ -95,7 +100,13 @@ func (s *Service) Login(ctx context.Context, username, password, ip string) (*Lo
 		return &LoginResult{TOTPRequired: true, MFAToken: mfaToken}, nil
 	}
 
-	return s.issueTokens(ctx, user, ip)
+	// 2FA es obligatorio: si aún no está activo, bloquear el acceso y forzar
+	// el setup. No se emite ninguna sesión hasta completar CompleteTOTPSetup.
+	setupToken, err := s.generateSetupToken(ctx, user.ID)
+	if err != nil {
+		return nil, fmt.Errorf("generate setup token: %w", err)
+	}
+	return &LoginResult{TOTPSetupRequired: true, SetupToken: setupToken}, nil
 }
 
 // VerifyTOTP valida el código TOTP con el MFA token temporal y emite JWT.
@@ -135,7 +146,7 @@ func (s *Service) VerifyTOTP(ctx context.Context, mfaToken, code string) (*Login
 // SetupTOTP genera un nuevo secreto TOTP y URL para el QR, sin activarlo aún.
 func (s *Service) SetupTOTP(ctx context.Context, userID uuid.UUID, username string) (*TOTPSetup, error) {
 	key, err := totp.Generate(totp.GenerateOpts{
-		Issuer:      "TSA Proxy",
+		Issuer:      "BIGDAVI",
 		AccountName: username,
 		Period:      30,
 		Digits:      6,
@@ -180,19 +191,62 @@ func (s *Service) EnableTOTP(ctx context.Context, userID uuid.UUID, code string)
 	return nil
 }
 
-// DisableTOTP verifica el código actual y desactiva 2FA.
-func (s *Service) DisableTOTP(ctx context.Context, userID uuid.UUID, code string) error {
+// AdminResetTOTP desactiva 2FA de otro usuario sin requerir su código actual
+// (uso: el usuario perdió el dispositivo). El actor es un admin/superadmin, no
+// el propio usuario, por eso no se valida ningún código. El usuario deberá
+// reconfigurar 2FA obligatoriamente en su próximo login.
+func (s *Service) AdminResetTOTP(ctx context.Context, targetUserID uuid.UUID) error {
+	return s.userRepo.UpdateTOTP(ctx, targetUserID, nil, false)
+}
+
+// SetupTOTPWithToken resuelve el userID desde un setup_token de login (usuario
+// sin 2FA aún) y genera un secreto TOTP pendiente — equivalente a SetupTOTP
+// pero sin requerir JWT, para el flujo de setup obligatorio en el login.
+func (s *Service) SetupTOTPWithToken(ctx context.Context, setupToken string) (*TOTPSetup, error) {
+	userID, user, err := s.resolveSetupToken(ctx, setupToken)
+	if err != nil {
+		return nil, err
+	}
+	return s.SetupTOTP(ctx, userID, user.Username)
+}
+
+// CompleteTOTPSetup valida el código, activa 2FA permanentemente y emite JWT —
+// combina EnableTOTP + issueTokens en un solo paso para el flujo de login
+// obligatorio. Si el código es inválido, el setup_token NO se consume, para
+// permitir reintentar sin volver a escanear el QR.
+func (s *Service) CompleteTOTPSetup(ctx context.Context, setupToken, code string) (*LoginResult, error) {
+	userID, user, err := s.resolveSetupToken(ctx, setupToken)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.EnableTOTP(ctx, userID, code); err != nil {
+		return nil, err
+	}
+
+	// Uso único, igual que mfa_token en VerifyTOTP.
+	_ = s.redisClient.Del(ctx, setupTokenKey(setupToken))
+
+	return s.issueTokens(ctx, user, "")
+}
+
+func (s *Service) resolveSetupToken(ctx context.Context, setupToken string) (uuid.UUID, *model.AdminUser, error) {
+	userIDStr, err := s.redisClient.Get(ctx, setupTokenKey(setupToken)).Result()
+	if err == redis.Nil {
+		return uuid.Nil, nil, fmt.Errorf("invalid or expired setup token")
+	}
+	if err != nil {
+		return uuid.Nil, nil, fmt.Errorf("setup token lookup: %w", err)
+	}
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		return uuid.Nil, nil, fmt.Errorf("invalid setup token")
+	}
 	user, err := s.userRepo.FindByID(ctx, userID)
-	if err != nil || user == nil {
-		return fmt.Errorf("user not found")
+	if err != nil || user == nil || !user.IsActive {
+		return uuid.Nil, nil, fmt.Errorf("user not found or inactive")
 	}
-	if !user.TOTPEnabled || user.TOTPSecret == nil {
-		return fmt.Errorf("totp not enabled")
-	}
-	if !totp.Validate(code, *user.TOTPSecret) {
-		return fmt.Errorf("invalid totp code")
-	}
-	return s.userRepo.UpdateTOTP(ctx, userID, nil, false)
+	return userID, user, nil
 }
 
 // issueTokens genera access + refresh token para un usuario ya verificado.
@@ -322,6 +376,25 @@ func refreshTokenKey(token string) string {
 
 func mfaTokenKey(token string) string {
 	return "mfa:" + token
+}
+
+// generateSetupToken crea un token de un solo uso para el flujo de 2FA
+// obligatorio en el login (usuario aún sin TOTP activo). TTL más largo que el
+// mfaToken porque el usuario recién va a instalar/abrir la app autenticadora.
+func (s *Service) generateSetupToken(ctx context.Context, userID uuid.UUID) (string, error) {
+	b := make([]byte, 24)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	token := base64.URLEncoding.EncodeToString(b)
+	if err := s.redisClient.Set(ctx, setupTokenKey(token), userID.String(), 15*time.Minute).Err(); err != nil {
+		return "", err
+	}
+	return token, nil
+}
+
+func setupTokenKey(token string) string {
+	return "totp_setup:" + token
 }
 
 // verifyArgon2id verifica una contraseña contra un hash Argon2id almacenado.

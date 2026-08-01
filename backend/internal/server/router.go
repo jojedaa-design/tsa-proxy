@@ -112,14 +112,19 @@ func NewRouter(d *Deps) http.Handler {
 
 		// Auth endpoints (sin JWT requerido)
 		r.Route("/auth", func(r chi.Router) {
-			r.Post("/login",       d.AdminAuth.Login)
-			r.Post("/logout",      d.AdminAuth.Logout)
-			r.Post("/refresh",     d.AdminAuth.Refresh)
-			r.Post("/2fa/verify",  d.AdminAuth.VerifyTOTP)
-			r.With(d.AdminAuthMW.Require).Get("/me",           d.AdminAuth.Me)
-			r.With(d.AdminAuthMW.Require).Get("/2fa/setup",    d.AdminAuth.SetupTOTP)
-			r.With(d.AdminAuthMW.Require).Post("/2fa/enable",  d.AdminAuth.EnableTOTP)
-			r.With(d.AdminAuthMW.Require).Post("/2fa/disable", d.AdminAuth.DisableTOTP)
+			r.Post("/login",             d.AdminAuth.Login)
+			r.Post("/logout",            d.AdminAuth.Logout)
+			r.Post("/refresh",           d.AdminAuth.Refresh)
+			r.Post("/2fa/verify",        d.AdminAuth.VerifyTOTP)
+			// 2FA obligatorio: flujo de setup forzado en el login (sin JWT — el
+			// usuario todavía no tiene sesión, se identifica por setup_token).
+			r.Post("/2fa/setup-required",  d.AdminAuth.SetupTOTPForLogin)
+			r.Post("/2fa/complete-setup",  d.AdminAuth.CompleteTOTPSetup)
+			r.With(d.AdminAuthMW.Require).Get("/me",          d.AdminAuth.Me)
+			r.With(d.AdminAuthMW.Require).Get("/2fa/setup",   d.AdminAuth.SetupTOTP)
+			r.With(d.AdminAuthMW.Require).Post("/2fa/enable", d.AdminAuth.EnableTOTP)
+			// /2fa/disable eliminado: el 2FA es obligatorio y permanente, no
+			// tiene autoservicio de desactivación (ver /users/{id}/reset-2fa).
 		})
 
 		// Todos los demás endpoints requieren JWT válido
@@ -203,6 +208,7 @@ func NewRouter(d *Deps) http.Handler {
 						r.Put("/",    d.AdminUsers.Update)
 						r.Delete("/", d.AdminUsers.Delete)
 						r.Post("/reset-password", d.AdminUsers.ResetPassword)
+						r.Post("/reset-2fa",      d.AdminUsers.ResetTOTP)
 					})
 				})
 				r.Get("/roles", d.AdminUsers.ListRoles)

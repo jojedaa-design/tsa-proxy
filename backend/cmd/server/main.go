@@ -127,7 +127,7 @@ func main() {
 	adminReportsH := adminhandler.NewReportsHandler(usageRepo, failedRepo, adminUserRepo)
 	adminAuditH   := adminhandler.NewAuditHandler(auditRepo, adminUserRepo)
 	adminConfigH  := adminhandler.NewConfigHandler(upstreamRepo, quotaRepo, cache, cfg.Upstream.AllowedHosts)
-	adminUsersH   := adminhandler.NewUsersHandler(adminUserRepo, tenantRepo)
+	adminUsersH   := adminhandler.NewUsersHandler(adminUserRepo, tenantRepo, authService)
 
 	// ── Router ────────────────────────────────────────────────────
 	router := server.NewRouter(&server.Deps{

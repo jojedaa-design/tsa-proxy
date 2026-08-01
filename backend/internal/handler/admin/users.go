@@ -20,10 +20,11 @@ import (
 type UsersHandler struct {
 	repo       *postgres.AdminUserRepository
 	tenantRepo *postgres.TenantRepository
+	authSvc    *authsvc.Service
 }
 
-func NewUsersHandler(repo *postgres.AdminUserRepository, tenantRepo *postgres.TenantRepository) *UsersHandler {
-	return &UsersHandler{repo: repo, tenantRepo: tenantRepo}
+func NewUsersHandler(repo *postgres.AdminUserRepository, tenantRepo *postgres.TenantRepository, authSvc *authsvc.Service) *UsersHandler {
+	return &UsersHandler{repo: repo, tenantRepo: tenantRepo, authSvc: authSvc}
 }
 
 // userResponse es la forma pública de un AdminUser (sin password_hash ni totp_secret).
@@ -296,6 +297,30 @@ func (h *UsersHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	apierr.WriteJSON(w, http.StatusOK, map[string]string{"status": "password_reset"})
+}
+
+// ResetTOTP — POST /api/admin/v1/users/{id}/reset-2fa
+// Desactiva 2FA de un usuario sin requerir su código actual (p.ej. perdió el
+// dispositivo). El usuario deberá reconfigurar 2FA obligatoriamente en su
+// próximo login.
+func (h *UsersHandler) ResetTOTP(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		apierr.WriteError(w, r, apierr.ErrBadRequest)
+		return
+	}
+
+	u, err := h.repo.FindByID(r.Context(), id)
+	if err != nil || u == nil {
+		apierr.WriteError(w, r, apierr.ErrNotFound)
+		return
+	}
+
+	if err := h.authSvc.AdminResetTOTP(r.Context(), id); err != nil {
+		apierr.WriteError(w, r, apierr.ErrInternal)
+		return
+	}
+	apierr.WriteJSON(w, http.StatusOK, map[string]string{"status": "2fa_reset"})
 }
 
 // ListRoles — GET /api/admin/v1/roles

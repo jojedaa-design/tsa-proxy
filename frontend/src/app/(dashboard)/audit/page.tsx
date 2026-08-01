@@ -15,6 +15,12 @@ const ACTION_COLORS: Record<string, string> = {
   "admin.login":       "badge-gray",
   "admin.logout":      "badge-gray",
   "ip_allowlist.create": "badge-green",
+  // Cambios sobre la TSA externa: sensibles, se marcan en rojo porque la URL
+  // del upstream determina a quién se le entregan las credenciales Basic.
+  "upstream.create":      "badge-red",
+  "upstream.update":      "badge-red",
+  "upstream.set_default": "badge-red",
+  "upstream.delete":      "badge-red",
 };
 
 export default function AuditPage() {

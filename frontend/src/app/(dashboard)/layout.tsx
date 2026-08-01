@@ -41,17 +41,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     });
   }, [router]);
 
-  // El rol "viewer" solo puede ver Dashboard, Reportes y Auditoría.
+  // El rol "viewer" solo puede ver Dashboard y Reportes.
   const isViewer = role === "viewer";
 
   useEffect(() => {
-    if (isViewer && (pathname.startsWith("/tenants") || pathname.startsWith("/config"))) {
+    if (isViewer && (pathname.startsWith("/tenants") || pathname.startsWith("/config") || pathname.startsWith("/audit"))) {
       router.push("/");
     }
   }, [isViewer, pathname, router]);
 
   const visibleNavItems = isViewer
-    ? navItems.filter((item) => item.href !== "/tenants" && item.href !== "/config")
+    ? navItems.filter((item) => item.href !== "/tenants" && item.href !== "/config" && item.href !== "/audit")
     : navItems;
 
   async function handleLogout() {

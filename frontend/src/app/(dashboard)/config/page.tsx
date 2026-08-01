@@ -323,6 +323,7 @@ function UpstreamModal({
   const [timeoutMs, setTimeoutMs] = useState("10000");
   const [maxRetries, setMaxRetries] = useState("1");
   const [error, setError] = useState("");
+  const [credentialsCleared, setCredentialsCleared] = useState(false);
 
   // Cargar datos del upstream si está editando
   const { data: upstream } = useQuery({
@@ -364,7 +365,18 @@ function UpstreamModal({
         ? api.updateUpstream(upstreamId, payload as any)
         : api.createUpstream(payload as any);
     },
-    onSuccess: onSuccess,
+    onSuccess: (result) => {
+      // Si cambió el host, el backend borró las credenciales guardadas por
+      // seguridad. Mantener el modal abierto para que el admin las reingrese
+      // en vez de dejar el upstream sin credenciales sin avisar.
+      if (result?.credentials_cleared) {
+        setPassword("");
+        setError("");
+        setCredentialsCleared(true);
+        return;
+      }
+      onSuccess();
+    },
     onError: (err: any) => {
       setError(err.message || err.error || "Error al guardar");
     },
@@ -463,6 +475,18 @@ function UpstreamModal({
               />
             </div>
           </div>
+
+          {credentialsCleared && (
+            <div className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded p-3">
+              <p className="font-semibold">Credenciales borradas por seguridad</p>
+              <p className="mt-1">
+                Cambiaste el host de esta TSA Externa, así que las credenciales guardadas
+                se eliminaron para que no puedan enviarse al destino nuevo. Ingresá usuario
+                y contraseña para <span className="font-medium break-all">{url}</span> y
+                guardá otra vez.
+              </p>
+            </div>
+          )}
 
           {error && <div className="text-sm text-red-600 bg-red-50 rounded p-2">{error}</div>}
         </div>

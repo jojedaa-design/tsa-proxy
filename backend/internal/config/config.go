@@ -1,11 +1,16 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/rs/zerolog/log"
+
+	"github.com/bigdavi/tsa-proxy/internal/upstream"
 )
 
 // Config contiene toda la configuración de la aplicación
@@ -81,8 +86,10 @@ type UpstreamConfig struct {
 	MaxRetries   int
 	MaxBodyBytes int64
 	// AllowedHosts es la lista blanca de hostnames permitidos como upstream TSA.
-	// Se lee de TSA_UPSTREAM_ALLOWLIST (coma-separada). Si está vacía, se permite
-	// cualquier hostname público (solo se bloquean IPs privadas/loopback).
+	// Se lee de TSA_UPSTREAM_ALLOWLIST (coma-separada) y es OBLIGATORIA: sin ella
+	// el servicio no arranca. Una lista vacía permitiría a cualquier admin apuntar
+	// el upstream a un host arbitrario, al que el proxy le entregaría la credencial
+	// Basic de la TSA externa. Ver upstream.ValidateURL.
 	// Ejemplo: "timestamp.digicert.com,tsuq.camerfirma.com"
 	AllowedHosts []string
 }
@@ -171,6 +178,27 @@ func Load() (*Config, error) {
 		BurstWindow: getInt("RATE_LIMIT_BURST_WINDOW", 60),
 	}
 
+	// TSA_UPSTREAM_ALLOWLIST es opcional en el .env (puede poblarse después vía web).
+	// Pero la validación en ValidateURL es fail-closed: si está vacía, rechaza toda URL
+	// en el panel de administración. Esto permite que el servicio arranque sin allowlist
+	// (útil para desarrollo o para editar el .env después de deployar), pero bloquea
+	// cualquier intento de crear/editar upstreams hasta que se configure.
+	if len(cfg.Upstream.AllowedHosts) == 0 {
+		log.Warn().
+			Str("component", "config").
+			Msg("TSA_UPSTREAM_ALLOWLIST vacía o no configurada: ningún upstream " +
+				"puede crear/editarse desde el panel hasta que se agregue la lista " +
+				"de hostnames permitidos (ej. TSA_UPSTREAM_ALLOWLIST=timestamp.digicert.com)")
+	}
+
+	// El fallback de upstream por .env solo tiene sentido si su URL también respeta
+	// la allowlist (cuando esté configurada). Se valida solo si la allowlist no está vacía.
+	if cfg.Upstream.URL != "" && len(cfg.Upstream.AllowedHosts) > 0 {
+		if _, err := upstream.CheckAllowlist(cfg.Upstream.URL, cfg.Upstream.AllowedHosts); err != nil {
+			return nil, fmt.Errorf("TSA_UPSTREAM_URL inválida: %w", err)
+		}
+	}
+
 	return cfg, nil
 }
 
@@ -219,7 +247,8 @@ func getDuration(key string, fallback time.Duration) time.Duration {
 }
 
 // parseAllowedHosts parsea una lista de hostnames separados por comas.
-// Retorna nil si la cadena está vacía (sin restricción de lista blanca).
+// Retorna nil si la cadena está vacía o solo tiene separadores; Load() trata ese
+// caso como configuración incompleta y aborta el arranque (fail-closed).
 func parseAllowedHosts(s string) []string {
 	if strings.TrimSpace(s) == "" {
 		return nil

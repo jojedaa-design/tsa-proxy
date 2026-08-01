@@ -68,12 +68,6 @@ export default function ReportsPage() {
     refetchInterval: 4000,
   });
 
-  const { data: countriesData, isLoading: countriesLoading } = useQuery({
-    queryKey: ["top-countries", from, to],
-    queryFn: () => api.getTopCountries({ from, to }),
-    refetchInterval: 4000,
-  });
-
   const { data: failuresData, isLoading: failuresLoading } = useQuery({
     queryKey: ["failures", from, to, tenantId],
     queryFn: () => api.getFailureBreakdown({ from, to, tenant_id: tenantId || undefined }),
@@ -347,62 +341,6 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* Tabla de Países */}
-      <div className="card overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-200">
-          <h2 className="font-semibold text-gray-900">Acceso por país</h2>
-          <p className="text-xs text-gray-500 mt-1">Ubicaciones geográficas de los clientes</p>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">País</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">Total</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">Exitosos</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">Fallidos</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">IPs únicas</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">Clientes</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">Latencia prom.</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {countriesLoading ? (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">Cargando...</td></tr>
-              ) : !countriesData?.data || countriesData.data.length === 0 ? (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">Sin datos para el período seleccionado</td></tr>
-              ) : countriesData.data.map((country, i) => (
-                <tr key={i} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-gray-800 font-medium">
-                    <span className="text-2xl mr-2">
-                      {country.country === 'unknown' ? '🌐' : getCountryFlag(country.country)}
-                    </span>
-                    {getCountryName(country.country)} ({country.country})
-                  </td>
-                  <td className="px-4 py-3 text-right text-gray-800 font-medium">
-                    {country.requests.toLocaleString()}
-                  </td>
-                  <td className="px-4 py-3 text-right text-green-600">
-                    {country.success_count.toLocaleString()}
-                  </td>
-                  <td className="px-4 py-3 text-right text-red-500">
-                    {country.fail_count.toLocaleString()}
-                  </td>
-                  <td className="px-4 py-3 text-right text-gray-600">
-                    {country.unique_ips}
-                  </td>
-                  <td className="px-4 py-3 text-right text-gray-600">
-                    {country.unique_tenants}
-                  </td>
-                  <td className="px-4 py-3 text-right text-gray-600">
-                    {country.avg_latency_ms.toFixed(0)} ms
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
   );
 }
@@ -454,35 +392,3 @@ function FailureList({ items, total }: { items: FailureDetail[]; total: number }
   );
 }
 
-// ── Helpers país ──────────────────────────────────────────────
-
-function getCountryFlag(countryCode: string): string {
-  if (countryCode === 'unknown') return '🌐';
-  const codePoints = countryCode
-    .toUpperCase()
-    .split('')
-    .map(char => 127397 + char.charCodeAt(0));
-  return String.fromCodePoint(...codePoints);
-}
-
-function getCountryName(code: string): string {
-  const countries: Record<string, string> = {
-    'AR': 'Argentina',
-    'US': 'Estados Unidos',
-    'MX': 'México',
-    'BR': 'Brasil',
-    'CL': 'Chile',
-    'CO': 'Colombia',
-    'PE': 'Perú',
-    'ES': 'España',
-    'GB': 'Reino Unido',
-    'DE': 'Alemania',
-    'FR': 'Francia',
-    'IT': 'Italia',
-    'CN': 'China',
-    'JP': 'Japón',
-    'IN': 'India',
-    'unknown': 'Desconocido',
-  };
-  return countries[code] || code;
-}

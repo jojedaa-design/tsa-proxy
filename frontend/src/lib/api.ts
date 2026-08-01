@@ -224,6 +224,10 @@ export interface TSAUpstream {
   max_retries: number;
   is_active: boolean;
   is_default: boolean;
+  // Presente solo en la respuesta de updateUpstream: el backend borró las
+  // credenciales almacenadas porque cambió el host del upstream. Hay que
+  // reingresarlas para el destino nuevo.
+  credentials_cleared?: boolean;
 }
 
 // ── Auth storage ──────────────────────────────────────────────

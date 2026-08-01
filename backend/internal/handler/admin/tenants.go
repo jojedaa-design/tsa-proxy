@@ -236,12 +236,17 @@ func (h *TenantsHandler) VerifyAndDelete(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Verificar si el usuario tiene 2FA habilitado
-	// Si tiene 2FA CON secreto guardado: requiere validación del código
-	// Si NO tiene 2FA o no hay secreto: permite eliminación sin código
+	// Verificar si el usuario tiene 2FA configurado correctamente
+	// Solo requiere verificación si AMBAS condiciones son verdaderas:
+	// 1. El usuario tiene un secreto TOTP guardado
+	// 2. El usuario tiene totp_enabled = true
 	hasTOTPSecret := user.TOTPSecret != nil && *user.TOTPSecret != ""
 
-	if hasTOTPSecret && user.TOTPEnabled {
+	// Si NO hay secreto guardado, permitir eliminación sin verificación
+	if !hasTOTPSecret {
+		// Proceder directamente con la eliminación
+	} else if user.TOTPEnabled {
+		// Tiene secreto Y está habilitado: requiere código válido
 		code := req.TotpCode
 		if code == "" {
 			apierr.WriteValidationError(w, r, map[string]string{"totp_code": "requerido"})
@@ -249,13 +254,11 @@ func (h *TenantsHandler) VerifyAndDelete(w http.ResponseWriter, r *http.Request)
 		}
 
 		// Verificar el código TOTP
-		// totp.Validate() by default checks current and +/- 1 time window (30 sec each)
 		if !totp.Validate(code, *user.TOTPSecret) {
 			apierr.WriteValidationError(w, r, map[string]string{"totp_code": "código inválido o expirado"})
 			return
 		}
 	}
-	// Si no tiene 2FA configurado correctamente, proceder sin validación
 
 	// Código válido, proceder con la eliminación
 	if err := h.svc.Delete(r.Context(), id, actorID); err != nil {

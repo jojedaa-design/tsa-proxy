@@ -89,7 +89,7 @@ export default function TenantsPage() {
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Cliente</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Slug</th>
+                <th className="text-left px-4 py-3 font-medium text-gray-600">Identificador</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Estado</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Cuota mensual</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Creado</th>

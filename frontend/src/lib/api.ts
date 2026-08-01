@@ -39,11 +39,18 @@ export interface Tenant {
 export interface TenantQuota {
   id: string;
   tenant_id: string;
-  monthly_limit: number;
   burst_per_minute: number;
-  hard_limit: boolean;
-  auto_suspend: boolean;
-  reset_day: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface QuotaBundle {
+  id: string;
+  tenant_id: string;
+  amount: number;
+  note?: string;
+  created_by?: string;
+  contracted_at: string;
 }
 
 export interface APICredential {
@@ -484,11 +491,22 @@ export const api = {
     return apiFetch<TenantQuota>(`/api/admin/v1/tenants/${tenantId}/quota`);
   },
 
-  async updateQuota(tenantId: string, data: Partial<TenantQuota>) {
+  async updateQuota(tenantId: string, data: { burst_per_minute: number }) {
     return apiFetch<TenantQuota>(`/api/admin/v1/tenants/${tenantId}/quota`, {
       method: "PUT",
       body: JSON.stringify(data),
     });
+  },
+
+  async addBundle(tenantId: string, data: { amount: number; note?: string }) {
+    return apiFetch<QuotaBundle>(`/api/admin/v1/tenants/${tenantId}/bundles`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async listBundles(tenantId: string) {
+    return apiFetch<QuotaBundle[]>(`/api/admin/v1/tenants/${tenantId}/bundles`);
   },
 
   // Reports

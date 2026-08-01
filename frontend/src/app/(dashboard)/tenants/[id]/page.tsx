@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
@@ -658,25 +658,22 @@ export default function TenantDetailPage() {
 
 function QuotaForm({ tenantId, initialQuota }: {
   tenantId: string;
-  initialQuota: { monthly_limit: number; burst_per_minute: number; hard_limit: boolean; auto_suspend: boolean; reset_day: number };
+  initialQuota: { burst_per_minute: number };
 }) {
   const qc = useQueryClient();
-  const [monthly, setMonthly] = useState(String(initialQuota.monthly_limit));
   const [burst, setBurst] = useState(String(initialQuota.burst_per_minute));
-  const [autoSuspend, setAutoSuspend] = useState(initialQuota.auto_suspend);
+  const [bundles, setBundles] = useState<any[]>([]);
+  const [amount, setAmount] = useState("");
+  const [note, setNote] = useState("");
+  const [showModal, setShowModal] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const mut = useMutation({
-    mutationFn: () => api.updateQuota(tenantId, {
-      monthly_limit: parseInt(monthly),
-      burst_per_minute: parseInt(burst),
-      // "Suspender automáticamente" es el único control de la bolsa en la UI, así
-      // que gobierna también hard_limit: activado corta al agotarla; desactivado
-      // permite seguir consumiendo y el exceso queda marcado en exceeds_quota.
-      hard_limit: autoSuspend,
-      auto_suspend: autoSuspend,
-      reset_day: initialQuota.reset_day,
-    }),
+  useEffect(() => {
+    api.listBundles(tenantId).then(setBundles);
+  }, [tenantId]);
+
+  const updateBurst = useMutation({
+    mutationFn: () => api.updateQuota(tenantId, { burst_per_minute: parseInt(burst) }),
     onSuccess: () => {
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
@@ -684,41 +681,103 @@ function QuotaForm({ tenantId, initialQuota }: {
     },
   });
 
+  const addBundle = useMutation({
+    mutationFn: () => api.addBundle(tenantId, {
+      amount: parseInt(amount),
+      note: note || undefined,
+    }),
+    onSuccess: () => {
+      setShowModal(false);
+      setAmount("");
+      setNote("");
+      api.listBundles(tenantId).then(setBundles);
+      qc.invalidateQueries({ queryKey: ["quota", tenantId] });
+    },
+  });
+
+  const contracted = bundles.reduce((sum, b) => sum + b.amount, 0);
+
   return (
-    <div className="card p-6 max-w-lg space-y-5">
-      <h2 className="text-base font-semibold text-gray-900">Configuración de bolsa contratada</h2>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="label">Bolsa contratada</label>
-          <input value={monthly} onChange={(e) => setMonthly(e.target.value)} className="input" type="number" min="1" />
-          <p className="text-xs text-gray-400 mt-1">cantidad total de sellos</p>
+    <div className="space-y-6">
+      <div className="card p-6 space-y-4">
+        <h2 className="text-base font-semibold text-gray-900">Bolsa de sellos</h2>
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <p className="text-2xl font-bold text-blue-900">{contracted}</p>
+          <p className="text-sm text-blue-700">sellos contratados en total</p>
         </div>
-        <div>
-          <label className="label">Burst por minuto</label>
-          <input value={burst} onChange={(e) => setBurst(e.target.value)} className="input" type="number" min="1" />
-          <p className="text-xs text-gray-400 mt-1">máx. requests / minuto</p>
-        </div>
+        <button onClick={() => setShowModal(true)} className="btn-primary">
+          Añadir bolsa
+        </button>
       </div>
 
-      <div className="space-y-3">
-        <label className="flex items-center gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={autoSuspend}
-            onChange={(e) => setAutoSuspend(e.target.checked)}
-            className="w-4 h-4 rounded border-gray-300 text-primary-600"
-          />
-          <div>
-            <span className="text-sm font-medium text-gray-700">Suspender automáticamente</span>
-            <p className="text-xs text-gray-400">Suspende el cliente al agotar la bolsa contratada</p>
+      {showModal && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg p-6 max-w-sm w-full">
+            <h3 className="text-lg font-semibold mb-4">Nueva bolsa</h3>
+            <input
+              type="number"
+              placeholder="Cantidad de sellos"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="input mb-3 w-full"
+              min="1"
+            />
+            <input
+              type="text"
+              placeholder="Referencia (nº factura, etc.)"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              className="input mb-4 w-full"
+            />
+            <div className="flex gap-3">
+              <button onClick={() => setShowModal(false)} className="btn flex-1">Cancelar</button>
+              <button
+                onClick={() => addBundle.mutate()}
+                disabled={!amount || addBundle.isPending}
+                className="btn-primary flex-1"
+              >
+                {addBundle.isPending ? "Guardando..." : "Guardar"}
+              </button>
+            </div>
           </div>
-        </label>
-      </div>
+        </div>
+      )}
 
-      <div className="flex items-center gap-3">
-        <button onClick={() => mut.mutate()} disabled={mut.isPending} className="btn-primary">
-          {mut.isPending ? "Guardando..." : "Guardar configuración"}
+      {bundles.length > 0 && (
+        <div className="card p-6">
+          <h3 className="text-base font-semibold mb-4">Histórico de bolsas</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="border-b">
+                <tr>
+                  <th className="text-left py-2">Fecha</th>
+                  <th className="text-right py-2">Cantidad</th>
+                  <th className="text-left py-2">Referencia</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bundles.map((b) => (
+                  <tr key={b.id} className="border-b">
+                    <td className="py-2">{new Date(b.contracted_at).toLocaleDateString()}</td>
+                    <td className="text-right font-medium">{b.amount}</td>
+                    <td className="text-gray-600">{b.note || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      <div className="card p-6 space-y-4">
+        <h3 className="text-base font-semibold">Límite de ritmo</h3>
+        <div>
+          <label className="label">Sellos por minuto</label>
+          <input value={burst} onChange={(e) => setBurst(e.target.value)} className="input" type="number" min="1" />
+          <p className="text-xs text-gray-400 mt-1">máximo de requests por minuto</p>
+        </div>
+        <button onClick={() => updateBurst.mutate()} disabled={updateBurst.isPending} className="btn-primary">
+          {updateBurst.isPending ? "Guardando..." : "Guardar"}
         </button>
         {saved && <span className="text-sm text-green-600">✓ Guardado</span>}
       </div>

@@ -312,19 +312,15 @@ function CreateTenantWizard({ onClose, onCreated }: {
         );
       }
 
-      // 4. Configurar cuota con valores por defecto
+      // 4. Crear bolsa inicial y configurar ritmo
       const monthlyLimit = 1000;
       const burstPerMinute = 10;
+      await api.addBundle(tenant.id, {
+        amount: monthlyLimit,
+        note: "Bolsa inicial",
+      });
       await api.updateQuota(tenant.id, {
-        monthly_limit: monthlyLimit,
         burst_per_minute: burstPerMinute,
-        // Sin suspensión automática, la bolsa no corta el consumo: el exceso se
-        // registra (exceeds_quota) pero se siguen emitiendo sellos. Ambos flags
-        // van juntos para que el cliente no quede bloqueado por un hard_limit
-        // que no es visible ni editable en el panel.
-        hard_limit: false,
-        auto_suspend: false,
-        reset_day: 1,
       });
 
       setResult({ tenant, credential, ips: ipEntries, monthlyLimit, burstPerMinute });

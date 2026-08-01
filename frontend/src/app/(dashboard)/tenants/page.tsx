@@ -154,14 +154,15 @@ export default function TenantsPage() {
         <Delete2FAModal
           tenantId={pendingDeleteId}
           tenantName={data?.data.find(t => t.id === pendingDeleteId)?.name || ""}
-          isLoading={deleteMut.isPending}
-          onConfirm={(totpCode) => {
-            api.verifyAndDeleteTenant(pendingDeleteId, totpCode).then(() => {
+          onConfirm={async (totpCode) => {
+            try {
+              await api.verifyAndDeleteTenant(pendingDeleteId, totpCode);
               setShowDelete2FA(false);
+              setPendingDeleteId(null);
               qc.invalidateQueries({ queryKey: ["tenants"] });
-            }).catch(() => {
-              // Error is handled by the modal
-            });
+            } catch (err) {
+              throw err;
+            }
           }}
           onCancel={handleDeleteCancel}
         />
@@ -530,7 +531,7 @@ function Delete2FAModal({
   tenantId: string;
   tenantName: string;
   isLoading: boolean;
-  onConfirm: (totpCode: string) => void;
+  onConfirm: (totpCode: string) => Promise<void>;
   onCancel: () => void;
 }) {
   const [totpCode, setTotpCode] = useState("");
@@ -549,11 +550,18 @@ function Delete2FAModal({
       setError("Ingresa el código de autenticación");
       return;
     }
+    if (totpCode.replace(/\s/g, "").length !== 6) {
+      setError("El código debe tener 6 dígitos");
+      return;
+    }
     setLocalLoading(true);
     try {
-      onConfirm(totpCode.replace(/\s/g, ""));
-    } catch {
-      setError("Error al verificar el código. Intenta de nuevo.");
+      await onConfirm(totpCode.replace(/\s/g, ""));
+    } catch (err: any) {
+      const errorMsg = err?.message || "Error al verificar el código. Intenta de nuevo.";
+      setError(errorMsg);
+      setTotpCode("");
+      inputRef.current?.focus();
     } finally {
       setLocalLoading(false);
     }

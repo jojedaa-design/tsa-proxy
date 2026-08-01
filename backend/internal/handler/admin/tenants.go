@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/pquerna/otp/totp"
 
 	"github.com/bigdavi/tsa-proxy/internal/apierr"
 	"github.com/bigdavi/tsa-proxy/internal/middleware"
@@ -18,10 +19,11 @@ import (
 type TenantsHandler struct {
 	svc       *tenantsvc.Service
 	quotaRepo *postgres.QuotaRepository
+	userRepo  *postgres.AdminUserRepository
 }
 
-func NewTenantsHandler(svc *tenantsvc.Service, quotaRepo *postgres.QuotaRepository) *TenantsHandler {
-	return &TenantsHandler{svc: svc, quotaRepo: quotaRepo}
+func NewTenantsHandler(svc *tenantsvc.Service, quotaRepo *postgres.QuotaRepository, userRepo *postgres.AdminUserRepository) *TenantsHandler {
+	return &TenantsHandler{svc: svc, quotaRepo: quotaRepo, userRepo: userRepo}
 }
 
 // List — GET /api/admin/v1/tenants
@@ -231,8 +233,28 @@ func (h *TenantsHandler) VerifyAndDelete(w http.ResponseWriter, r *http.Request)
 	}
 
 	actorID, _ := middleware.GetAdminUserID(r.Context())
-	// For now, we skip 2FA verification and proceed directly.
-	// In a full implementation, you would verify the TOTP code against the user's secret here.
+
+	// Obtener el usuario actual y verificar su TOTP
+	user, err := h.userRepo.FindByID(r.Context(), actorID)
+	if err != nil || user == nil || !user.IsActive {
+		apierr.WriteError(w, r, apierr.ErrAdminUnauthorized)
+		return
+	}
+
+	// Verificar si el usuario tiene 2FA habilitado
+	if user.TOTPSecret == nil || *user.TOTPSecret == "" {
+		apierr.WriteError(w, r, apierr.ErrAdminUnauthorized)
+		return
+	}
+
+	// Verificar el código TOTP
+	valid := totp.Validate(req.TotpCode, *user.TOTPSecret)
+	if !valid {
+		apierr.WriteValidationError(w, r, map[string]string{"totp_code": "código inválido"})
+		return
+	}
+
+	// Código válido, proceder con la eliminación
 	if err := h.svc.Delete(r.Context(), id, actorID); err != nil {
 		apierr.WriteError(w, r, apierr.ErrInternal)
 		return

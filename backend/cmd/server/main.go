@@ -118,7 +118,7 @@ func main() {
 	timestampH := proxyhandler.NewTimestampHandler(proxyService, cfg, credRepo, cache)
 
 	adminAuthH    := adminhandler.NewAuthHandler(authService, adminUserRepo)
-	adminTenantsH := adminhandler.NewTenantsHandler(tenantService, quotaRepo)
+	adminTenantsH := adminhandler.NewTenantsHandler(tenantService, quotaRepo, adminUserRepo)
 	adminCredsH     := adminhandler.NewCredentialsHandler(credService)
 	adminBasicAuthH := adminhandler.NewBasicAuthHandler(basicAuthService)
 	adminNoAuthH    := adminhandler.NewNoAuthHandler(noauthRepo)

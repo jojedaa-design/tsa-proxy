@@ -105,6 +105,8 @@ export interface MonthlyAggregate {
   failed_requests: number;
   rejected_requests: number;
   avg_latency_ms: number;
+  monthly_limit?: number;
+  exceeded_requests?: number;
 }
 
 export interface IPUsage {

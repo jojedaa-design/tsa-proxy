@@ -190,6 +190,8 @@ type MonthlyAggregate struct {
 	RejectedRequests   int       `json:"rejected_requests"`
 	TotalLatencyMs     int64     `json:"total_latency_ms"`
 	AvgLatencyMs       float64   `json:"avg_latency_ms"`
+	MonthlyLimit       *int      `json:"monthly_limit,omitempty"`
+	ExceededRequests   *int      `json:"exceeded_requests,omitempty"`
 	LastUpdatedAt      time.Time `json:"last_updated_at"`
 }
 

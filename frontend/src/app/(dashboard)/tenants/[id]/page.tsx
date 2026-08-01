@@ -175,7 +175,7 @@ export default function TenantDetailPage() {
               {t === "credentials"  ? "Credenciales API" :
                t === "basic-auth"   ? "Acceso TSA Privado" :
                t === "noauth"       ? "Acceso TSP" :
-               t === "ip-allowlist" ? "IP Allowlist" : "Cuota"}
+               t === "ip-allowlist" ? "IP Allowlist" : "Bolsa Contratada"}
             </button>
           ))}
         </div>
@@ -686,10 +686,17 @@ function QuotaForm({ tenantId, initialQuota }: {
     <div className="card p-6 max-w-lg space-y-5">
       <h2 className="text-base font-semibold text-gray-900">Configuración de bolsa contratada</h2>
 
-      <div>
-        <label className="label">Saldo disponible (requests/minuto)</label>
-        <input value={burst} onChange={(e) => setBurst(e.target.value)} className="input" type="number" min="1" />
-        <p className="text-xs text-gray-400 mt-1">máx. requests / minuto</p>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="label">Bolsa contratada</label>
+          <input value={monthly} onChange={(e) => setMonthly(e.target.value)} className="input" type="number" min="1" />
+          <p className="text-xs text-gray-400 mt-1">cantidad total de sellos</p>
+        </div>
+        <div>
+          <label className="label">Burst por minuto</label>
+          <input value={burst} onChange={(e) => setBurst(e.target.value)} className="input" type="number" min="1" />
+          <p className="text-xs text-gray-400 mt-1">máx. requests / minuto</p>
+        </div>
       </div>
 
       <div className="space-y-3">

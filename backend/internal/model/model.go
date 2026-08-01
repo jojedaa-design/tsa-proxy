@@ -119,13 +119,18 @@ type TenantQuota struct {
 	ID             uuid.UUID  `json:"id"`
 	TenantID       uuid.UUID  `json:"tenant_id"`
 	PlanID         *uuid.UUID `json:"plan_id,omitempty"`
-	MonthlyLimit   int        `json:"monthly_limit"`
 	BurstPerMinute int        `json:"burst_per_minute"`
-	HardLimit      bool       `json:"hard_limit"`
-	AutoSuspend    bool       `json:"auto_suspend"`
-	ResetDay       int        `json:"reset_day"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at"`
+}
+
+type QuotaBundle struct {
+	ID           uuid.UUID  `json:"id"`
+	TenantID     uuid.UUID  `json:"tenant_id"`
+	Amount       int        `json:"amount"`
+	Note         *string    `json:"note,omitempty"`
+	CreatedBy    *uuid.UUID `json:"created_by,omitempty"`
+	ContractedAt time.Time  `json:"contracted_at"`
 }
 
 // ─── TSA Upstream ─────────────────────────────────────────────

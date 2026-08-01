@@ -86,8 +86,9 @@ func (s *Service) Process(ctx context.Context, req *Request) (*Result, *apierr.A
 	now := time.Now()
 	year, month, _ := now.Date()
 
-	// ── 1. Validar y decrementar cuota ────────────────────────
-	// Cache-first: intentar obtener quota desde Redis (TTL 60s)
+	// ── 1. Validar bolsa de sellos ────────────────────────────
+	// Modelo de bolsa: contratado = SUM(quota_bundles), consumido = SUM(monthly_usage_aggregates)
+	// Si consumido >= contratado → rechaza (sin excepciones)
 	var quota *model.TenantQuota
 	if s.cache != nil {
 		quota, _ = s.cache.GetTenantQuota(ctx, req.TenantID)
@@ -106,24 +107,13 @@ func (s *Service) Process(ctx context.Context, req *Request) (*Result, *apierr.A
 		}
 	}
 
-	if quota != nil && quota.HardLimit {
-		monthKey := int(month)
-		ttlSeconds := secondsUntilEndOfMonth(now)
+	if quota != nil {
+		// Obtener totales: contratado (bolsas) y consumido (all-time)
+		contracted, _ := s.quotaRepo.GetTotalContracted(ctx, req.TenantID)
+		consumed, _ := s.quotaRepo.GetTotalConsumption(ctx, req.TenantID)
 
-		// Incrementar en Redis
-		newCount, incrErr := s.rateLimiter.IncrQuota(ctx, req.TenantID, year, monthKey, ttlSeconds)
-		if incrErr != nil {
-			// Si Redis falla, verificar en Postgres directamente
-			pgUsage, _ := s.quotaRepo.GetMonthlyUsage(ctx, req.TenantID, year, monthKey)
-			if pgUsage >= quota.MonthlyLimit {
-				s.handleQuotaExceeded(ctx, req, quota, year, monthKey)
-				return nil, apierr.ErrQuotaExceeded
-			}
-		} else if int(newCount) > quota.MonthlyLimit {
-			// Revertir el increment
-			_ = s.rateLimiter.DecrQuota(ctx, req.TenantID, year, monthKey)
-			s.handleQuotaExceeded(ctx, req, quota, year, monthKey)
-			// Registrar el rechazo por cuota en usage_events para reporting
+		if consumed >= contracted && contracted > 0 {
+			// Bolsa agotada: rechazar
 			reason := "quota_exceeded"
 			reqSize := req.RequestSize
 			go s.recordUsage(context.Background(), req, model.UsageStatusRejected, &reason,
@@ -186,12 +176,6 @@ func (s *Service) Process(ctx context.Context, req *Request) (*Result, *apierr.A
 		usageStatus = model.UsageStatusError
 		reason := "upstream_error"
 		rejectionReason = &reason
-
-		// Si fallamos, revertir el decremento de cuota
-		if quota != nil && quota.HardLimit {
-			monthKey := int(month)
-			_ = s.rateLimiter.DecrQuota(ctx, req.TenantID, year, monthKey)
-		}
 	} else {
 		usageStatus = model.UsageStatusSuccess
 		status := upstreamResp.HTTPStatus
@@ -200,15 +184,8 @@ func (s *Service) Process(ctx context.Context, req *Request) (*Result, *apierr.A
 		responseSize = &size
 	}
 
-	// Detectar si el uso excede la bolsa contratada (sin hard limit)
+	// Con el modelo de bolsa, no hay exceso: solo rechaza o emite.
 	exceedsQuota := false
-	if quota != nil && !quota.HardLimit && quota.MonthlyLimit > 0 {
-		monthKey := int(month)
-		pgUsage, _ := s.quotaRepo.GetMonthlyUsage(ctx, req.TenantID, year, monthKey)
-		if pgUsage >= quota.MonthlyLimit && usageStatus == model.UsageStatusSuccess {
-			exceedsQuota = true
-		}
-	}
 
 	reqSize := req.RequestSize
 	if s.cfg.Proxy.UsageRecordAsync {

@@ -46,7 +46,7 @@ func (h *QuotasHandler) Get(w http.ResponseWriter, r *http.Request) {
 	apierr.WriteJSON(w, http.StatusOK, quota)
 }
 
-// Update — PUT /api/admin/v1/tenants/:id/quota
+// Update — PUT /api/admin/v1/tenants/:id/quota (solo burst_per_minute)
 func (h *QuotasHandler) Update(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
@@ -55,61 +55,42 @@ func (h *QuotasHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		PlanID         *uuid.UUID `json:"plan_id"`
-		MonthlyLimit   int        `json:"monthly_limit"`
-		BurstPerMinute int        `json:"burst_per_minute"`
-		HardLimit      bool       `json:"hard_limit"`
-		AutoSuspend    bool       `json:"auto_suspend"`
-		ResetDay       int        `json:"reset_day"`
+		BurstPerMinute int `json:"burst_per_minute"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		apierr.WriteError(w, r, apierr.ErrBadRequest)
 		return
 	}
 
-	fields := map[string]string{}
-	if req.MonthlyLimit <= 0 { fields["monthly_limit"] = "must be > 0" }
-	if req.BurstPerMinute <= 0 { fields["burst_per_minute"] = "must be > 0" }
-	if req.ResetDay < 1 || req.ResetDay > 28 { fields["reset_day"] = "must be between 1 and 28" }
-	if len(fields) > 0 {
-		apierr.WriteValidationError(w, r, fields)
+	if req.BurstPerMinute <= 0 {
+		apierr.WriteValidationError(w, r, map[string]string{
+			"burst_per_minute": "must be > 0",
+		})
 		return
 	}
 
 	actorID, _ := middleware.GetAdminUserID(r.Context())
-
 	before, _ := h.quotaRepo.GetByTenant(r.Context(), tenantID)
 
 	upserted, err := h.quotaRepo.Upsert(r.Context(), &model.TenantQuota{
 		TenantID:       tenantID,
-		PlanID:         req.PlanID,
-		MonthlyLimit:   req.MonthlyLimit,
 		BurstPerMinute: req.BurstPerMinute,
-		HardLimit:      req.HardLimit,
-		AutoSuspend:    req.AutoSuspend,
-		ResetDay:       req.ResetDay,
 	})
 	if err != nil {
 		apierr.WriteError(w, r, apierr.ErrInternal)
 		return
 	}
 
-	// Invalidar cache de quota
 	if h.cache != nil {
 		go func() { _ = h.cache.InvalidateTenantQuota(context.Background(), tenantID) }()
 	}
 
 	go func() {
-		changes := map[string]interface{}{}
-		if before != nil {
-			changes["before"] = map[string]interface{}{
-				"monthly_limit":    before.MonthlyLimit,
-				"burst_per_minute": before.BurstPerMinute,
-			}
-		}
-		changes["after"] = map[string]interface{}{
-			"monthly_limit":    req.MonthlyLimit,
-			"burst_per_minute": req.BurstPerMinute,
+		changes := map[string]interface{}{
+			"burst_per_minute": map[string]int{
+				"before": before.BurstPerMinute,
+				"after":  req.BurstPerMinute,
+			},
 		}
 		eid := tenantID
 		_ = h.audit.Insert(context.Background(), &model.AuditEvent{
@@ -124,4 +105,86 @@ func (h *QuotasHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	apierr.WriteJSON(w, http.StatusOK, upserted)
+}
+
+// AddBundle — POST /api/admin/v1/tenants/:id/bundles (recargar bolsa)
+func (h *QuotasHandler) AddBundle(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		apierr.WriteError(w, r, apierr.ErrBadRequest)
+		return
+	}
+
+	var req struct {
+		Amount int     `json:"amount"`
+		Note   *string `json:"note,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierr.WriteError(w, r, apierr.ErrBadRequest)
+		return
+	}
+
+	if req.Amount <= 0 {
+		apierr.WriteValidationError(w, r, map[string]string{
+			"amount": "must be > 0",
+		})
+		return
+	}
+
+	actorID, _ := middleware.GetAdminUserID(r.Context())
+
+	bundle, err := h.quotaRepo.AddBundle(r.Context(), &model.QuotaBundle{
+		TenantID:  tenantID,
+		Amount:    req.Amount,
+		Note:      req.Note,
+		CreatedBy: &actorID,
+	})
+	if err != nil {
+		apierr.WriteError(w, r, apierr.ErrInternal)
+		return
+	}
+
+	if h.cache != nil {
+		go func() { _ = h.cache.InvalidateTenantQuota(context.Background(), tenantID) }()
+	}
+
+	go func() {
+		eid := tenantID
+		_ = h.audit.Insert(context.Background(), &model.AuditEvent{
+			ActorID:    &actorID,
+			ActorType:  "admin",
+			Action:     "quota.bundle.add",
+			EntityType: "tenant",
+			EntityID:   &eid,
+			TenantID:   &eid,
+			Changes: map[string]interface{}{
+				"bundle_id": bundle.ID,
+				"amount":    req.Amount,
+				"note":      req.Note,
+			},
+		})
+	}()
+
+	apierr.WriteJSON(w, http.StatusCreated, bundle)
+}
+
+// ListBundles — GET /api/admin/v1/tenants/:id/bundles (histórico)
+func (h *QuotasHandler) ListBundles(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		apierr.WriteError(w, r, apierr.ErrBadRequest)
+		return
+	}
+
+	bundles, err := h.quotaRepo.ListBundles(r.Context(), tenantID)
+	if err != nil {
+		apierr.WriteError(w, r, apierr.ErrInternal)
+		return
+	}
+
+	if bundles == nil {
+		bundles = []*model.QuotaBundle{}
+	}
+
+	apierr.WriteJSON(w, http.StatusOK, bundles)
 }

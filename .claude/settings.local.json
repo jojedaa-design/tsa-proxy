@@ -86,7 +86,8 @@
       "Bash(javap -p /c/Users/jesus/AppData/Local/Temp/claude/C--dev-tsa-proxy/ff0a9a86-e3a9-4c29-90c1-f63e6a50789f/scratchpad/dss/eu/europa/esig/dss/service/http/commons/HostConnection.class)",
       "Bash(curl -s -o /dev/null -w \"POST /ts sin credenciales -> HTTP %{http_code}\\\\n\" -X POST -H \"Content-Type: application/timestamp-query\" --data-binary \"x\" \"https://qa-tsa.bigdavi.com:443/ts\")",
       "Bash(curl -s -i -X POST --data-binary \"x\" \"https://qa-tsa.bigdavi.com/ts\")",
-      "Bash(git commit -q -m ' *)"
+      "Bash(git commit -q -m ' *)",
+      "Bash(xargs -n1 basename)"
     ]
   }
 }

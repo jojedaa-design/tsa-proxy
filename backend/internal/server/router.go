@@ -157,6 +157,8 @@ func NewRouter(d *Deps) http.Handler {
 
 						r.Get("/quota", d.AdminQuotas.Get)
 						r.Put("/quota", d.AdminQuotas.Update)
+						r.Post("/bundles", d.AdminQuotas.AddBundle)
+						r.Get("/bundles", d.AdminQuotas.ListBundles)
 
 						r.Get("/basic-auth",  d.AdminBasicAuth.ListByTenant)
 						r.Post("/basic-auth", d.AdminBasicAuth.Create)

@@ -21,12 +21,10 @@ func NewQuotaRepository(pool *pgxpool.Pool) *QuotaRepository {
 func (r *QuotaRepository) GetByTenant(ctx context.Context, tenantID uuid.UUID) (*model.TenantQuota, error) {
 	q := &model.TenantQuota{}
 	err := r.pool.QueryRow(ctx, `
-		SELECT id, tenant_id, plan_id, monthly_limit, burst_per_minute,
-		       hard_limit, auto_suspend, reset_day, created_at, updated_at
+		SELECT id, tenant_id, plan_id, burst_per_minute, created_at, updated_at
 		FROM tenant_quotas WHERE tenant_id=$1
 	`, tenantID).Scan(
-		&q.ID, &q.TenantID, &q.PlanID, &q.MonthlyLimit, &q.BurstPerMinute,
-		&q.HardLimit, &q.AutoSuspend, &q.ResetDay, &q.CreatedAt, &q.UpdatedAt,
+		&q.ID, &q.TenantID, &q.PlanID, &q.BurstPerMinute, &q.CreatedAt, &q.UpdatedAt,
 	)
 	if err == pgx.ErrNoRows {
 		return nil, nil
@@ -37,22 +35,40 @@ func (r *QuotaRepository) GetByTenant(ctx context.Context, tenantID uuid.UUID) (
 func (r *QuotaRepository) Upsert(ctx context.Context, q *model.TenantQuota) (*model.TenantQuota, error) {
 	upserted := &model.TenantQuota{}
 	err := r.pool.QueryRow(ctx, `
-		INSERT INTO tenant_quotas
-		  (tenant_id, plan_id, monthly_limit, burst_per_minute, hard_limit, auto_suspend, reset_day)
-		VALUES ($1,$2,$3,$4,$5,$6,$7)
+		INSERT INTO tenant_quotas (tenant_id, plan_id, burst_per_minute)
+		VALUES ($1,$2,$3)
 		ON CONFLICT (tenant_id) DO UPDATE SET
-		  plan_id=$2, monthly_limit=$3, burst_per_minute=$4,
-		  hard_limit=$5, auto_suspend=$6, reset_day=$7
-		RETURNING id, tenant_id, plan_id, monthly_limit, burst_per_minute,
-		          hard_limit, auto_suspend, reset_day, created_at, updated_at
-	`, q.TenantID, q.PlanID, q.MonthlyLimit, q.BurstPerMinute,
-		q.HardLimit, q.AutoSuspend, q.ResetDay).Scan(
+		  plan_id=$2, burst_per_minute=$3
+		RETURNING id, tenant_id, plan_id, burst_per_minute, created_at, updated_at
+	`, q.TenantID, q.PlanID, q.BurstPerMinute).Scan(
 		&upserted.ID, &upserted.TenantID, &upserted.PlanID,
-		&upserted.MonthlyLimit, &upserted.BurstPerMinute,
-		&upserted.HardLimit, &upserted.AutoSuspend, &upserted.ResetDay,
-		&upserted.CreatedAt, &upserted.UpdatedAt,
+		&upserted.BurstPerMinute, &upserted.CreatedAt, &upserted.UpdatedAt,
 	)
 	return upserted, err
+}
+
+func (r *QuotaRepository) GetTotalConsumption(ctx context.Context, tenantID uuid.UUID) (int, error) {
+	var total int
+	err := r.pool.QueryRow(ctx, `
+		SELECT COALESCE(SUM(total_requests), 0) FROM monthly_usage_aggregates
+		WHERE tenant_id=$1
+	`, tenantID).Scan(&total)
+	if err == pgx.ErrNoRows {
+		return 0, nil
+	}
+	return total, err
+}
+
+func (r *QuotaRepository) GetTotalContracted(ctx context.Context, tenantID uuid.UUID) (int, error) {
+	var total int
+	err := r.pool.QueryRow(ctx, `
+		SELECT COALESCE(SUM(amount), 0) FROM quota_bundles
+		WHERE tenant_id=$1
+	`, tenantID).Scan(&total)
+	if err == pgx.ErrNoRows {
+		return 0, nil
+	}
+	return total, err
 }
 
 func (r *QuotaRepository) GetMonthlyUsage(ctx context.Context, tenantID uuid.UUID, year, month int) (int, error) {
@@ -66,6 +82,39 @@ func (r *QuotaRepository) GetMonthlyUsage(ctx context.Context, tenantID uuid.UUI
 		return 0, nil
 	}
 	return total, err
+}
+
+func (r *QuotaRepository) AddBundle(ctx context.Context, bundle *model.QuotaBundle) (*model.QuotaBundle, error) {
+	created := &model.QuotaBundle{}
+	err := r.pool.QueryRow(ctx, `
+		INSERT INTO quota_bundles (tenant_id, amount, note, created_by)
+		VALUES ($1,$2,$3,$4)
+		RETURNING id, tenant_id, amount, note, created_by, contracted_at
+	`, bundle.TenantID, bundle.Amount, bundle.Note, bundle.CreatedBy).Scan(
+		&created.ID, &created.TenantID, &created.Amount, &created.Note,
+		&created.CreatedBy, &created.ContractedAt,
+	)
+	return created, err
+}
+
+func (r *QuotaRepository) ListBundles(ctx context.Context, tenantID uuid.UUID) ([]*model.QuotaBundle, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, tenant_id, amount, note, created_by, contracted_at
+		FROM quota_bundles WHERE tenant_id=$1 ORDER BY contracted_at DESC
+	`, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	bundles := make([]*model.QuotaBundle, 0)
+	for rows.Next() {
+		b := &model.QuotaBundle{}
+		if err := rows.Scan(&b.ID, &b.TenantID, &b.Amount, &b.Note, &b.CreatedBy, &b.ContractedAt); err != nil {
+			return nil, err
+		}
+		bundles = append(bundles, b)
+	}
+	return bundles, rows.Err()
 }
 
 func (r *QuotaRepository) UpsertMonthlyAggregate(ctx context.Context, tenantID uuid.UUID, year, month int, status model.UsageStatus, latencyMs int) error {

@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/pquerna/otp/totp"
+	"github.com/rs/zerolog/log"
 
 	"github.com/bigdavi/tsa-proxy/internal/apierr"
 	"github.com/bigdavi/tsa-proxy/internal/middleware"
@@ -203,6 +204,7 @@ func (h *TenantsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	actorID, _ := middleware.GetAdminUserID(r.Context())
 	if err := h.svc.Delete(r.Context(), id, actorID); err != nil {
+		log.Error().Err(err).Str("tenant_id", id.String()).Msg("failed to delete tenant (deprecated endpoint)")
 		apierr.WriteError(w, r, apierr.ErrInternal)
 		return
 	}
@@ -262,7 +264,11 @@ func (h *TenantsHandler) VerifyAndDelete(w http.ResponseWriter, r *http.Request)
 
 	// Código válido, proceder con la eliminación
 	if err := h.svc.Delete(r.Context(), id, actorID); err != nil {
-		apierr.WriteError(w, r, apierr.ErrInternal)
+		log.Error().Err(err).Str("tenant_id", id.String()).Msg("failed to delete tenant")
+		apierr.WriteJSON(w, http.StatusInternalServerError, map[string]interface{}{
+			"error":   "delete_failed",
+			"message": err.Error(),
+		})
 		return
 	}
 

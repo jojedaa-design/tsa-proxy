@@ -559,7 +559,15 @@ function Delete2FAModal({
       // Enviar código (puede estar vacío si no hay 2FA configurado)
       await onConfirm(cleanCode);
     } catch (err: any) {
-      const errorMsg = err?.message || "Error al verificar el código. Intenta de nuevo.";
+      // Prioridad: fields.totp_code > message > error > default
+      let errorMsg = "Error al verificar. Intenta de nuevo.";
+      if (err?.fields?.totp_code) {
+        errorMsg = err.fields.totp_code;
+      } else if (err?.message) {
+        errorMsg = err.message;
+      } else if (err?.error) {
+        errorMsg = err.error;
+      }
       setError(errorMsg);
       setTotpCode("");
       inputRef.current?.focus();

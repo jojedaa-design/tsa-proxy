@@ -92,7 +92,10 @@
       "Bash(ssh prod-tsa 'docker exec tsa_postgres psql -U tsaproxy -d tsaproxy -c \" *)",
       "Bash(git commit -q -m 'feat: make initial bundle amount configurable on client creation *)",
       "Bash(git commit -q -m 'style: increase spacing in bundle history table *)",
-      "Bash(git commit -q -m 'feat: add bundle consumption report to reports page *)"
+      "Bash(git commit -q -m 'feat: add bundle consumption report to reports page *)",
+      "Bash(ssh qa-tsa 'docker exec tsa_postgres psql -U tsaproxy_qa -d tsaproxy_qa -c \" *)",
+      "Bash(curl -s \"http://localhost:8080/api/admin/v1/reports/bundles/1be1ce32-9bbc-4892-b321-c6157adfc17e\")",
+      "Bash(git commit -q -m 'fix: use correct chi router syntax for bundle report endpoint *)"
     ]
   }
 }

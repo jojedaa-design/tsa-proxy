@@ -189,9 +189,9 @@ func (h *QuotasHandler) ListBundles(w http.ResponseWriter, r *http.Request) {
 	apierr.WriteJSON(w, http.StatusOK, bundles)
 }
 
-// GetBundleReport — GET /api/admin/v1/reports/bundles/:tenant_id (bolsas con consumo FIFO)
+// GetBundleReport — GET /api/admin/v1/reports/bundles/{tenantId} (bolsas con consumo FIFO)
 func (h *QuotasHandler) GetBundleReport(w http.ResponseWriter, r *http.Request) {
-	tenantID, err := uuid.Parse(chi.URLParam(r, "tenant_id"))
+	tenantID, err := uuid.Parse(chi.URLParam(r, "tenantId"))
 	if err != nil {
 		apierr.WriteError(w, r, apierr.ErrBadRequest)
 		return

@@ -227,7 +227,7 @@ func NewRouter(d *Deps) http.Handler {
 				r.Get("/top-user-agents", d.AdminReports.TopUserAgents)
 				r.Get("/top-countries",   d.AdminReports.TopCountries)
 				r.Get("/failures",        d.AdminReports.FailureBreakdown)
-				r.Get("/bundles/:tenant_id", d.AdminQuotas.GetBundleReport)
+				r.Get("/bundles/{tenantId}", d.AdminQuotas.GetBundleReport)
 			})
 
 			r.Get("/audit-events", d.AdminAudit.List)

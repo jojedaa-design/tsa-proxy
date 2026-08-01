@@ -227,16 +227,9 @@ func (h *TenantsHandler) VerifyAndDelete(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Limpiar y validar el código TOTP
-	code := req.TotpCode
-	if code == "" {
-		apierr.WriteValidationError(w, r, map[string]string{"totp_code": "requerido"})
-		return
-	}
-
 	actorID, _ := middleware.GetAdminUserID(r.Context())
 
-	// Obtener el usuario actual y verificar su TOTP
+	// Obtener el usuario actual
 	user, err := h.userRepo.FindByID(r.Context(), actorID)
 	if err != nil || user == nil || !user.IsActive {
 		apierr.WriteError(w, r, apierr.ErrAdminUnauthorized)
@@ -244,17 +237,25 @@ func (h *TenantsHandler) VerifyAndDelete(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Verificar si el usuario tiene 2FA habilitado
-	if user.TOTPSecret == nil || *user.TOTPSecret == "" {
-		apierr.WriteValidationError(w, r, map[string]string{"totp_code": "2FA no configurado"})
-		return
-	}
+	// Si tiene 2FA CON secreto guardado: requiere validación del código
+	// Si NO tiene 2FA o no hay secreto: permite eliminación sin código
+	hasTOTPSecret := user.TOTPSecret != nil && *user.TOTPSecret != ""
 
-	// Verificar el código TOTP
-	// totp.Validate() by default checks current and +/- 1 time window (30 sec each)
-	if !totp.Validate(code, *user.TOTPSecret) {
-		apierr.WriteValidationError(w, r, map[string]string{"totp_code": "código inválido o expirado"})
-		return
+	if hasTOTPSecret && user.TOTPEnabled {
+		code := req.TotpCode
+		if code == "" {
+			apierr.WriteValidationError(w, r, map[string]string{"totp_code": "requerido"})
+			return
+		}
+
+		// Verificar el código TOTP
+		// totp.Validate() by default checks current and +/- 1 time window (30 sec each)
+		if !totp.Validate(code, *user.TOTPSecret) {
+			apierr.WriteValidationError(w, r, map[string]string{"totp_code": "código inválido o expirado"})
+			return
+		}
 	}
+	// Si no tiene 2FA configurado correctamente, proceder sin validación
 
 	// Código válido, proceder con la eliminación
 	if err := h.svc.Delete(r.Context(), id, actorID); err != nil {

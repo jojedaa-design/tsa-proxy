@@ -546,17 +546,18 @@ function Delete2FAModal({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    if (!totpCode.trim()) {
-      setError("Ingresa el código de autenticación");
-      return;
-    }
-    if (totpCode.replace(/\s/g, "").length !== 6) {
+    const cleanCode = totpCode.replace(/\s/g, "");
+
+    // Si hay código ingresado, validar que tenga 6 dígitos
+    if (cleanCode && cleanCode.length !== 6) {
       setError("El código debe tener 6 dígitos");
       return;
     }
+
     setLocalLoading(true);
     try {
-      await onConfirm(totpCode.replace(/\s/g, ""));
+      // Enviar código (puede estar vacío si no hay 2FA configurado)
+      await onConfirm(cleanCode);
     } catch (err: any) {
       const errorMsg = err?.message || "Error al verificar el código. Intenta de nuevo.";
       setError(errorMsg);

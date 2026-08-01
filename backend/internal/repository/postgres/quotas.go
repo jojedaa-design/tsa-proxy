@@ -117,6 +117,50 @@ func (r *QuotaRepository) ListBundles(ctx context.Context, tenantID uuid.UUID) (
 	return bundles, rows.Err()
 }
 
+type BundleWithConsumption struct {
+	ID           uuid.UUID `json:"id"`
+	Amount       int       `json:"amount"`
+	Consumed     int       `json:"consumed"`
+	Note         *string   `json:"note,omitempty"`
+	ContractedAt string    `json:"contracted_at"`
+}
+
+func (r *QuotaRepository) GetBundlesWithConsumption(ctx context.Context, tenantID uuid.UUID) ([]*BundleWithConsumption, error) {
+	totalConsumed, _ := r.GetTotalConsumption(ctx, tenantID)
+
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, amount, note, contracted_at
+		FROM quota_bundles WHERE tenant_id = $1
+		ORDER BY contracted_at ASC
+	`, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	bundles := make([]*BundleWithConsumption, 0)
+	remaining := totalConsumed
+
+	for rows.Next() {
+		b := &BundleWithConsumption{}
+		if err := rows.Scan(&b.ID, &b.Amount, &b.Note, &b.ContractedAt); err != nil {
+			return nil, err
+		}
+
+		// FIFO: cada bolsa consume lo que le corresponde
+		if remaining >= b.Amount {
+			b.Consumed = b.Amount
+			remaining -= b.Amount
+		} else {
+			b.Consumed = remaining
+			remaining = 0
+		}
+
+		bundles = append(bundles, b)
+	}
+	return bundles, rows.Err()
+}
+
 func (r *QuotaRepository) UpsertMonthlyAggregate(ctx context.Context, tenantID uuid.UUID, year, month int, status model.UsageStatus, latencyMs int) error {
 	var successInt, failInt, rejectedInt int
 	switch status {

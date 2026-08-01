@@ -566,6 +566,12 @@ export const api = {
     );
   },
 
+  async getBundleReport(tenantId: string) {
+    return apiFetch<Array<{ id: string; amount: number; consumed: number; note?: string; contracted_at: string }>>(
+      `/api/admin/v1/reports/bundles/${tenantId}`
+    );
+  },
+
   // Audit
   async listAuditEvents(params: { page?: number; action?: string; from?: string; to?: string } = {}) {
     const q = new URLSearchParams();

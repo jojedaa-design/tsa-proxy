@@ -188,3 +188,24 @@ func (h *QuotasHandler) ListBundles(w http.ResponseWriter, r *http.Request) {
 
 	apierr.WriteJSON(w, http.StatusOK, bundles)
 }
+
+// GetBundleReport — GET /api/admin/v1/reports/bundles/:tenant_id (bolsas con consumo FIFO)
+func (h *QuotasHandler) GetBundleReport(w http.ResponseWriter, r *http.Request) {
+	tenantID, err := uuid.Parse(chi.URLParam(r, "tenant_id"))
+	if err != nil {
+		apierr.WriteError(w, r, apierr.ErrBadRequest)
+		return
+	}
+
+	bundles, err := h.quotaRepo.GetBundlesWithConsumption(r.Context(), tenantID)
+	if err != nil {
+		apierr.WriteError(w, r, apierr.ErrInternal)
+		return
+	}
+
+	if bundles == nil {
+		bundles = []*postgres.BundleWithConsumption{}
+	}
+
+	apierr.WriteJSON(w, http.StatusOK, bundles)
+}

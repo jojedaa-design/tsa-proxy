@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -122,7 +123,7 @@ type BundleWithConsumption struct {
 	Amount       int       `json:"amount"`
 	Consumed     int       `json:"consumed"`
 	Note         *string   `json:"note,omitempty"`
-	ContractedAt string    `json:"contracted_at"`
+	ContractedAt time.Time `json:"contracted_at"`
 }
 
 func (r *QuotaRepository) GetBundlesWithConsumption(ctx context.Context, tenantID uuid.UUID) ([]*BundleWithConsumption, error) {

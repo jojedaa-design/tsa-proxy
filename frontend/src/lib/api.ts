@@ -568,7 +568,7 @@ export const api = {
 
   async getBundleReport(tenantId: string) {
     return apiFetch<Array<{ id: string; amount: number; consumed: number; note?: string; contracted_at: string }>>(
-      `/api/admin/v1/reports/bundles/${encodeURIComponent(tenantId)}`
+      `/api/admin/v1/reports/bundles?tenant_id=${encodeURIComponent(tenantId)}`
     );
   },
 

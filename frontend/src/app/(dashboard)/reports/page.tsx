@@ -147,6 +147,54 @@ export default function ReportsPage() {
         </div>
       )}
 
+      {/* Bolsas contratadas y consumo */}
+      {tenantId && (
+        <div className="card p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Bolsas contratadas y consumo</h2>
+          {bundleLoading ? (
+            <p className="text-gray-500">Cargando...</p>
+          ) : !bundleData || bundleData.length === 0 ? (
+            <p className="text-gray-500">Sin bolsas contratadas</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="border-b">
+                  <tr>
+                    <th className="text-left py-2 pr-4">Fecha de contratación</th>
+                    <th className="text-right py-2 px-4">Cantidad</th>
+                    <th className="text-right py-2 px-4">Consumido</th>
+                    <th className="text-right py-2 px-4">Disponible</th>
+                    <th className="text-left py-2 pl-4">Referencia</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bundleData.map((bundle) => {
+                    const available = bundle.amount - bundle.consumed;
+                    const pct = (bundle.consumed / bundle.amount) * 100;
+                    return (
+                      <tr key={bundle.id} className="border-b">
+                        <td className="py-3 pr-4">{new Date(bundle.contracted_at).toLocaleDateString("es-AR")}</td>
+                        <td className="text-right font-medium py-3 px-4">{bundle.amount.toLocaleString()}</td>
+                        <td className="text-right py-3 px-4">
+                          <div className="flex items-center justify-end gap-2">
+                            <span>{bundle.consumed.toLocaleString()}</span>
+                            <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
+                              <div className="h-full bg-primary-600" style={{ width: `${pct}%` }} />
+                            </div>
+                          </div>
+                        </td>
+                        <td className="text-right py-3 px-4 font-medium">{available.toLocaleString()}</td>
+                        <td className="text-gray-600 py-3 pl-4">{bundle.note || "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── Análisis de Fallos (solo Admin/SuperAdmin) ──────────────────────────────── */}
       {isAdminOrSuperAdmin && (
       <div className="card overflow-hidden">
@@ -362,53 +410,6 @@ export default function ReportsPage() {
         </div>
       </div>
 
-      {/* Bolsas contratadas */}
-      {tenantId && (
-        <div className="card p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Bolsas contratadas y consumo</h2>
-          {bundleLoading ? (
-            <p className="text-gray-500">Cargando...</p>
-          ) : !bundleData || bundleData.length === 0 ? (
-            <p className="text-gray-500">Sin bolsas contratadas</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="border-b">
-                  <tr>
-                    <th className="text-left py-2 pr-4">Fecha de contratación</th>
-                    <th className="text-right py-2 px-4">Cantidad</th>
-                    <th className="text-right py-2 px-4">Consumido</th>
-                    <th className="text-right py-2 px-4">Disponible</th>
-                    <th className="text-left py-2 pl-4">Referencia</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {bundleData.map((bundle) => {
-                    const available = bundle.amount - bundle.consumed;
-                    const pct = (bundle.consumed / bundle.amount) * 100;
-                    return (
-                      <tr key={bundle.id} className="border-b">
-                        <td className="py-3 pr-4">{new Date(bundle.contracted_at).toLocaleDateString("es-AR")}</td>
-                        <td className="text-right font-medium py-3 px-4">{bundle.amount.toLocaleString()}</td>
-                        <td className="text-right py-3 px-4">
-                          <div className="flex items-center justify-end gap-2">
-                            <span>{bundle.consumed.toLocaleString()}</span>
-                            <div className="w-16 h-2 bg-gray-200 rounded-full overflow-hidden">
-                              <div className="h-full bg-primary-600" style={{ width: `${pct}%` }} />
-                            </div>
-                          </div>
-                        </td>
-                        <td className="text-right py-3 px-4 font-medium">{available.toLocaleString()}</td>
-                        <td className="text-gray-600 py-3 pl-4">{bundle.note || "—"}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
 
     </div>
   );

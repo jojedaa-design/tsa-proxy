@@ -91,16 +91,15 @@ export default function TenantsPage() {
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Cliente</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Identificador</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Estado</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Cuota mensual</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Creado</th>
                 <th className="text-right px-4 py-3 font-medium text-gray-600">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {isLoading ? (
-                <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">Cargando...</td></tr>
+                <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400">Cargando...</td></tr>
               ) : data?.data.length === 0 ? (
-                <tr><td colSpan={6} className="px-4 py-8 text-center text-gray-400">No hay clientes</td></tr>
+                <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400">No hay clientes</td></tr>
               ) : data?.data.map((tenant) => (
                 <TenantRow
                   key={tenant.id}
@@ -201,13 +200,6 @@ function TenantRow({ tenant, onSuspend, onReactivate, onDelete }: {
           {tenant.status === "active" ? "Activo" :
            tenant.status === "suspended" ? "Suspendido" : "Eliminado"}
         </span>
-      </td>
-      <td className="px-4 py-3 text-gray-600">
-        {tenant.quota ? (
-          <span>{tenant.quota.monthly_limit.toLocaleString()} / mes</span>
-        ) : (
-          <span className="text-gray-400 text-xs">Sin cuota</span>
-        )}
       </td>
       <td className="px-4 py-3 text-gray-500 text-xs">
         {new Date(tenant.created_at).toLocaleDateString("es-AR")}

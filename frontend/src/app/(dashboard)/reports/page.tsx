@@ -114,16 +114,8 @@ export default function ReportsPage() {
         </button>
       </div>
 
-      {/* Filtros */}
+      {/* Filtro de Cliente */}
       <div className="flex gap-3 flex-wrap items-end">
-        <div>
-          <label className="label">Desde</label>
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="input" />
-        </div>
-        <div>
-          <label className="label">Hasta</label>
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="input" />
-        </div>
         <div>
           <label className="label">Cliente</label>
           <select value={tenantId} onChange={(e) => setTenantId(e.target.value)} className="input">
@@ -260,61 +252,6 @@ export default function ReportsPage() {
         )}
       </div>
       )}
-
-      {/* Tabla de consumo por cliente */}
-      <div className="card overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-200">
-          <h2 className="font-semibold text-gray-900">Consumo por cliente</h2>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Cliente</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Período</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">Total</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">Exitosos</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">Fallidos</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">Rechazados</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">Latencia prom.</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {isLoading ? (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">Cargando...</td></tr>
-              ) : data?.data.length === 0 ? (
-                <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-400">Sin datos para el período seleccionado</td></tr>
-              ) : data?.data.map((row, i) => (
-                <tr key={i} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 font-medium text-gray-800">{row.tenant_name}</td>
-                  <td className="px-4 py-3 text-gray-600">
-                    {new Date(row.year, row.month - 1).toLocaleDateString("es-AR", { month: "long", year: "numeric" })}
-                  </td>
-                  <td className="px-4 py-3 text-right text-gray-800 font-medium">
-                    {row.total_requests.toLocaleString()}
-                  </td>
-                  <td className="px-4 py-3 text-right text-green-600">
-                    {row.successful_requests.toLocaleString()}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <span className={row.failed_requests > 0 ? "text-red-500 font-medium" : "text-gray-400"}>
-                      {row.failed_requests.toLocaleString()}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <span className={row.rejected_requests > 0 ? "text-orange-500 font-medium" : "text-gray-400"}>
-                      {row.rejected_requests.toLocaleString()}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right text-gray-600">
-                    {row.avg_latency_ms.toFixed(0)} ms
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
 
       {/* Tabla de IPs más activas */}
       <div className="card overflow-hidden">

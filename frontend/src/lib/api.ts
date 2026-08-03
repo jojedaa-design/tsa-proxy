@@ -516,6 +516,10 @@ export const api = {
     return apiFetch<DashboardSummary>("/api/admin/v1/reports/usage/summary");
   },
 
+  async getNextReportNumber() {
+    return apiFetch<{ number: number }>("/api/admin/v1/reports/next-number", { method: "POST" });
+  },
+
   async getUsage(params: { tenant_id?: string; from?: string; to?: string }) {
     const q = new URLSearchParams();
     if (params.from) q.set("from", params.from);

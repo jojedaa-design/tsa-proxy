@@ -20,6 +20,14 @@ func NewUsageRepository(pool *pgxpool.Pool) *UsageRepository {
 	return &UsageRepository{pool: pool}
 }
 
+// NextReportNumber devuelve el siguiente número correlativo para un reporte
+// de consumo exportado (documento ejecutivo en PDF).
+func (r *UsageRepository) NextReportNumber(ctx context.Context) (int64, error) {
+	var n int64
+	err := r.pool.QueryRow(ctx, `SELECT nextval('consumption_report_seq')`).Scan(&n)
+	return n, err
+}
+
 // InsertEvent registra un evento de uso.
 func (r *UsageRepository) InsertEvent(ctx context.Context, e *model.UsageEvent) error {
 	_, err := r.pool.Exec(ctx, `

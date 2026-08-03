@@ -93,6 +93,19 @@ func (h *ReportsHandler) Usage(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// NextReportNumber — POST /api/admin/v1/reports/next-number
+// Devuelve un número correlativo único para numerar un reporte de consumo
+// exportado (PDF ejecutivo). Cada llamada consume el siguiente valor de la
+// secuencia, por lo que solo debe invocarse una vez por documento generado.
+func (h *ReportsHandler) NextReportNumber(w http.ResponseWriter, r *http.Request) {
+	n, err := h.usageRepo.NextReportNumber(r.Context())
+	if err != nil {
+		apierr.WriteError(w, r, apierr.ErrInternal)
+		return
+	}
+	apierr.WriteJSON(w, http.StatusOK, map[string]interface{}{"number": n})
+}
+
 // UsageCSV — GET /api/admin/v1/reports/usage.csv
 func (h *ReportsHandler) UsageCSV(w http.ResponseWriter, r *http.Request) {
 	f, err := parseUsageFilter(r)

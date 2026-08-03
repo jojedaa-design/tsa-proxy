@@ -228,6 +228,7 @@ func NewRouter(d *Deps) http.Handler {
 				r.Get("/top-countries",   d.AdminReports.TopCountries)
 				r.Get("/failures",        d.AdminReports.FailureBreakdown)
 				r.Get("/bundles", d.AdminQuotas.GetBundleReport)
+				r.Post("/next-number", d.AdminReports.NextReportNumber)
 			})
 
 			r.Get("/audit-events", d.AdminAudit.List)

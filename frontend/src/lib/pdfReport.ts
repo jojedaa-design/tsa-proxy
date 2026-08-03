@@ -9,6 +9,11 @@ const GRAY_TEXT: [number, number, number] = [75, 85, 99];
 const GRAY_LIGHT: [number, number, number] = [156, 163, 175];
 const WHITE: [number, number, number] = [255, 255, 255];
 
+// Aspect ratio del logo (viewBox del SVG): 1762.58 x 814.2
+const LOGO_VIEWBOX_RATIO = 1762.58 / 814.2;
+const LOGO_RENDER_WIDTH = 900;
+const LOGO_RENDER_HEIGHT = Math.round(LOGO_RENDER_WIDTH / LOGO_VIEWBOX_RATIO);
+
 type BundleItem = {
   id: string;
   amount: number;
@@ -28,6 +33,8 @@ export interface ConsumptionReportInput {
   failures?: FailureBreakdownResponse;
   showFailures: boolean;
   generatedByUsername?: string;
+  /** Número correlativo del reporte (asignado por el backend). */
+  reportNumber?: number;
 }
 
 const MAX_ROWS = 6;
@@ -49,11 +56,55 @@ function fmtValue(v: unknown): string {
   return String(v);
 }
 
+function fmtReportNumber(n?: number): string {
+  if (n == null) return "N° —";
+  return `N° ${String(n).padStart(6, "0")}`;
+}
+
+/**
+ * Rasteriza el logo blanco de BIGDAVI (SVG, fondo transparente) a PNG para
+ * poder incrustarlo en el PDF. Se le inyecta width/height explícitos al SVG
+ * antes de rasterizarlo para forzar una resolución alta y nítida — sin esto,
+ * el navegador podría rasterizarlo internamente a un tamaño por defecto bajo.
+ */
+async function loadLogoAsPng(): Promise<{ dataUrl: string; aspectRatio: number } | null> {
+  try {
+    const res = await fetch("/brand/logo-white.svg");
+    if (!res.ok) return null;
+    const svgText = await res.text();
+    const sizedSvg = svgText.replace(
+      "<svg ",
+      `<svg width="${LOGO_RENDER_WIDTH}" height="${LOGO_RENDER_HEIGHT}" `
+    );
+    const blob = new Blob([sizedSvg], { type: "image/svg+xml" });
+    const url = URL.createObjectURL(blob);
+    try {
+      const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = () => reject(new Error("logo load failed"));
+        el.src = url;
+      });
+      const canvas = document.createElement("canvas");
+      canvas.width = LOGO_RENDER_WIDTH;
+      canvas.height = LOGO_RENDER_HEIGHT;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return null;
+      ctx.drawImage(img, 0, 0, LOGO_RENDER_WIDTH, LOGO_RENDER_HEIGHT);
+      return { dataUrl: canvas.toDataURL("image/png"), aspectRatio: LOGO_RENDER_WIDTH / LOGO_RENDER_HEIGHT };
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Genera un PDF ejecutivo de una sola hoja con el reporte de consumo actual
  * y dispara la descarga en el navegador.
  */
-export function generateConsumptionReportPDF(input: ConsumptionReportInput): void {
+export async function generateConsumptionReportPDF(input: ConsumptionReportInput): Promise<void> {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
@@ -66,22 +117,31 @@ export function generateConsumptionReportPDF(input: ConsumptionReportInput): voi
     hour: "2-digit", minute: "2-digit", second: "2-digit",
   });
 
+  const logo = await loadLogoAsPng();
+
   // ── Encabezado ──────────────────────────────────────────────
   const headerHeight = 28;
   doc.setFillColor(...NAVY);
   doc.rect(0, 0, pageWidth, headerHeight, "F");
 
-  doc.setTextColor(...WHITE);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(16);
-  doc.text("BIGDAVI", margin, 12);
+  if (logo) {
+    const logoHeight = 9;
+    const logoWidth = logoHeight * logo.aspectRatio;
+    doc.addImage(logo.dataUrl, "PNG", margin, 6.5, logoWidth, logoHeight);
+  } else {
+    doc.setTextColor(...WHITE);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.text("BIGDAVI", margin, 12);
+  }
 
+  doc.setTextColor(...WHITE);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
-  doc.text("Reporte de Consumo — TSA Proxy", margin, 19);
+  doc.text("Reporte de Consumo de Sellos de Tiempo", margin, 19);
   doc.setFontSize(8);
   doc.setTextColor(200, 210, 225);
-  doc.text("Panel de Administración", margin, 24);
+  doc.text(`${fmtReportNumber(input.reportNumber)}  ·  Panel de Administración`, margin, 24);
 
   doc.setFontSize(8.5);
   doc.setTextColor(...WHITE);
@@ -222,7 +282,7 @@ export function generateConsumptionReportPDF(input: ConsumptionReportInput): voi
       doc.setTextColor(...NAVY);
       doc.setFont("helvetica", "bold");
       doc.setFontSize(10);
-      doc.text("Errores en el proxy", margin, y);
+      doc.text("Errores", margin, y);
 
       if (hasProxyErrors) {
         autoTable(doc, {

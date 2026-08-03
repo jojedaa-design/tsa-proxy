@@ -46,6 +46,7 @@ export default function ReportsPage() {
   const [tenantId, setTenantId] = useState("");
   const [isAdminOrSuperAdmin, setIsAdminOrSuperAdmin] = useState(false);
   const [username, setUsername] = useState("");
+  const [exportingPDF, setExportingPDF] = useState(false);
 
   // Cargar rol del usuario para determinar si puede ver "Análisis de fallos"
   useEffect(() => {
@@ -96,23 +97,36 @@ export default function ReportsPage() {
     refetchInterval: 4000,
   });
 
-  function exportPDF() {
-    const tenantName = tenantId
-      ? (tenants?.data.find((t) => t.id === tenantId)?.name ?? "—")
-      : "Todos los clientes";
+  async function exportPDF() {
+    if (exportingPDF) return;
+    setExportingPDF(true);
+    try {
+      const tenantName = tenantId
+        ? (tenants?.data.find((t) => t.id === tenantId)?.name ?? "—")
+        : "Todos los clientes";
 
-    generateConsumptionReportPDF({
-      tenantName,
-      from,
-      to,
-      summary: data?.summary as Record<string, unknown> | undefined,
-      bundles: bundleData,
-      ips: ipsData?.data,
-      agents: agentsData?.data,
-      failures: failuresData,
-      showFailures: isAdminOrSuperAdmin,
-      generatedByUsername: username,
-    });
+      // El número correlativo lo asigna el backend (secuencia en BD) — si la
+      // llamada falla, el PDF igual se genera, mostrando "N° —".
+      const reportNumber = await api.getNextReportNumber()
+        .then((r) => r.number)
+        .catch(() => undefined);
+
+      await generateConsumptionReportPDF({
+        tenantName,
+        from,
+        to,
+        summary: data?.summary as Record<string, unknown> | undefined,
+        bundles: bundleData,
+        ips: ipsData?.data,
+        agents: agentsData?.data,
+        failures: failuresData,
+        showFailures: isAdminOrSuperAdmin,
+        generatedByUsername: username,
+        reportNumber,
+      });
+    } finally {
+      setExportingPDF(false);
+    }
   }
 
   const hasFailures =
@@ -126,8 +140,8 @@ export default function ReportsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Reportes de consumo</h1>
           <p className="text-sm text-gray-500 mt-0.5">Análisis de uso por cliente y período</p>
         </div>
-        <button onClick={exportPDF} className="btn-secondary">
-          ↓ Exportar PDF
+        <button onClick={exportPDF} disabled={exportingPDF} className="btn-secondary disabled:opacity-50">
+          {exportingPDF ? "Generando..." : "↓ Exportar PDF"}
         </button>
       </div>
 

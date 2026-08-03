@@ -120,37 +120,42 @@ export async function generateConsumptionReportPDF(input: ConsumptionReportInput
   const logo = await loadLogoAsPng();
 
   // ── Encabezado ──────────────────────────────────────────────
-  const headerHeight = 28;
+  // Logo al 400% (aumentado en 300%) del tamaño original de 9mm de alto.
+  const logoHeight = 9 * 4;
+  const headerHeight = 56;
   doc.setFillColor(...NAVY);
   doc.rect(0, 0, pageWidth, headerHeight, "F");
 
   if (logo) {
-    const logoHeight = 9;
     const logoWidth = logoHeight * logo.aspectRatio;
-    doc.addImage(logo.dataUrl, "PNG", margin, 6.5, logoWidth, logoHeight);
+    doc.addImage(logo.dataUrl, "PNG", margin, 6, logoWidth, logoHeight);
   } else {
     doc.setTextColor(...WHITE);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(16);
-    doc.text("BIGDAVI", margin, 12);
+    doc.setFontSize(32);
+    doc.text("BIGDAVI", margin, 28);
   }
 
   doc.setTextColor(...WHITE);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
-  doc.text("Reporte de Consumo de Sellos de Tiempo", margin, 19);
+  doc.text("Reporte de Consumo de Sellos de Tiempo", margin, headerHeight - 9);
   doc.setFontSize(8);
   doc.setTextColor(200, 210, 225);
-  doc.text(`${fmtReportNumber(input.reportNumber)}  ·  Panel de Administración`, margin, 24);
+  doc.text(fmtReportNumber(input.reportNumber), margin, headerHeight - 4);
 
   doc.setFontSize(8.5);
   doc.setTextColor(...WHITE);
-  doc.text(`Generado: ${generatedAt}`, pageWidth - margin, 11, { align: "right" });
-  doc.text(`Cliente: ${input.tenantName}`, pageWidth - margin, 16, { align: "right" });
-  doc.text(`Período: ${fmtDate(input.from)} – ${fmtDate(input.to)}`, pageWidth - margin, 21, { align: "right" });
-  if (input.generatedByUsername) {
-    doc.text(`Usuario: ${input.generatedByUsername}`, pageWidth - margin, 26, { align: "right" });
-  }
+  const infoLines = [
+    `Generado: ${generatedAt}`,
+    `Cliente: ${input.tenantName}`,
+    `Período: ${fmtDate(input.from)} – ${fmtDate(input.to)}`,
+  ];
+  if (input.generatedByUsername) infoLines.push(`Usuario: ${input.generatedByUsername}`);
+  const infoStartY = (headerHeight - infoLines.length * 5) / 2 + 4;
+  infoLines.forEach((line, i) => {
+    doc.text(line, pageWidth - margin, infoStartY + i * 5, { align: "right" });
+  });
 
   let y = headerHeight + 8;
 
@@ -197,11 +202,8 @@ export async function generateConsumptionReportPDF(input: ConsumptionReportInput
         b.note || "—",
       ]),
       theme: "striped",
-      headStyles: { fillColor: BLUE, textColor: WHITE, fontSize: 8 },
-      bodyStyles: { fontSize: 8, textColor: GRAY_TEXT },
-      columnStyles: {
-        1: { halign: "right" }, 2: { halign: "right" }, 3: { halign: "right" },
-      },
+      headStyles: { fillColor: BLUE, textColor: WHITE, fontSize: 8, halign: "center" },
+      bodyStyles: { fontSize: 8, textColor: GRAY_TEXT, halign: "center" },
     });
     y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
     if (input.bundles.length > MAX_ROWS) {
@@ -230,16 +232,15 @@ export async function generateConsumptionReportPDF(input: ConsumptionReportInput
       startY: y + 3,
       margin: { left: margin, right: pageWidth - margin - halfWidth },
       tableWidth: halfWidth,
-      head: [["IP", "Cliente", "Total", "Fallidos"]],
+      head: [["IP", "Total", "Fallidos"]],
       body: input.ips.slice(0, MAX_ROWS).map((ip) => [
-        ip.ip, ip.tenant_name,
+        ip.ip,
         ip.requests.toLocaleString("es-AR"),
         ip.fail_count.toLocaleString("es-AR"),
       ]),
       theme: "striped",
-      headStyles: { fillColor: NAVY, textColor: WHITE, fontSize: 7 },
-      bodyStyles: { fontSize: 7, textColor: GRAY_TEXT },
-      columnStyles: { 2: { halign: "right" }, 3: { halign: "right" } },
+      headStyles: { fillColor: NAVY, textColor: WHITE, fontSize: 7, halign: "center" },
+      bodyStyles: { fontSize: 7, textColor: GRAY_TEXT, halign: "center" },
     });
     maxFinalY = Math.max(maxFinalY, (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY);
   }
@@ -261,9 +262,8 @@ export async function generateConsumptionReportPDF(input: ConsumptionReportInput
         a.fail_count.toLocaleString("es-AR"),
       ]),
       theme: "striped",
-      headStyles: { fillColor: NAVY, textColor: WHITE, fontSize: 7 },
-      bodyStyles: { fontSize: 7, textColor: GRAY_TEXT },
-      columnStyles: { 1: { halign: "right" }, 2: { halign: "right" } },
+      headStyles: { fillColor: NAVY, textColor: WHITE, fontSize: 7, halign: "center" },
+      bodyStyles: { fontSize: 7, textColor: GRAY_TEXT, halign: "center" },
     });
     maxFinalY = Math.max(maxFinalY, (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY);
   }
@@ -294,9 +294,8 @@ export async function generateConsumptionReportPDF(input: ConsumptionReportInput
             f.label, f.count.toLocaleString("es-AR"),
           ]),
           theme: "striped",
-          headStyles: { fillColor: [185, 28, 28], textColor: WHITE, fontSize: 7 },
-          bodyStyles: { fontSize: 7, textColor: GRAY_TEXT },
-          columnStyles: { 1: { halign: "right" } },
+          headStyles: { fillColor: [185, 28, 28], textColor: WHITE, fontSize: 7, halign: "center" },
+          bodyStyles: { fontSize: 7, textColor: GRAY_TEXT, halign: "center" },
         });
         failMaxY = Math.max(failMaxY, (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY);
       } else {
@@ -322,9 +321,8 @@ export async function generateConsumptionReportPDF(input: ConsumptionReportInput
             f.label, f.count.toLocaleString("es-AR"),
           ]),
           theme: "striped",
-          headStyles: { fillColor: [217, 119, 6], textColor: WHITE, fontSize: 7 },
-          bodyStyles: { fontSize: 7, textColor: GRAY_TEXT },
-          columnStyles: { 1: { halign: "right" } },
+          headStyles: { fillColor: [217, 119, 6], textColor: WHITE, fontSize: 7, halign: "center" },
+          bodyStyles: { fontSize: 7, textColor: GRAY_TEXT, halign: "center" },
         });
         failMaxY = Math.max(failMaxY, (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY);
       } else {

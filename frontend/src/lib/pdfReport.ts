@@ -346,7 +346,7 @@ export async function generateConsumptionReportPDF(input: ConsumptionReportInput
   doc.setFont("helvetica", "normal");
   doc.setFontSize(7);
   doc.setTextColor(...GRAY_LIGHT);
-  doc.text("TSA Proxy — Documento generado automáticamente. Confidencial, uso interno.", margin, footerY);
+  doc.text("Documento generado automáticamente. Confidencial, uso interno.", margin, footerY);
   doc.text("Página 1 de 1", pageWidth - margin, footerY, { align: "right" });
 
   // ── Descarga ──────────────────────────────────────────────────

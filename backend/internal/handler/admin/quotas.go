@@ -86,9 +86,13 @@ func (h *QuotasHandler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	go func() {
+		beforeBurst := 0
+		if before != nil {
+			beforeBurst = before.BurstPerMinute
+		}
 		changes := map[string]interface{}{
 			"burst_per_minute": map[string]int{
-				"before": before.BurstPerMinute,
+				"before": beforeBurst,
 				"after":  req.BurstPerMinute,
 			},
 		}

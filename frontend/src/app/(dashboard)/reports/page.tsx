@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, type FailureDetail } from "@/lib/api";
+import { generateConsumptionReportPDF } from "@/lib/pdfReport";
 
 // ── Helpers de categoría ──────────────────────────────────────
 
@@ -44,6 +45,7 @@ export default function ReportsPage() {
   const [to, setTo]     = useState(() => new Date().toISOString().split("T")[0]);
   const [tenantId, setTenantId] = useState("");
   const [isAdminOrSuperAdmin, setIsAdminOrSuperAdmin] = useState(false);
+  const [username, setUsername] = useState("");
 
   // Cargar rol del usuario para determinar si puede ver "Análisis de fallos"
   useEffect(() => {
@@ -51,6 +53,7 @@ export default function ReportsPage() {
       const roles = user.roles || [];
       const hasAdminAccess = roles.includes("admin") || roles.includes("superadmin");
       setIsAdminOrSuperAdmin(hasAdminAccess);
+      setUsername(user.username);
     }).catch(() => {
       setIsAdminOrSuperAdmin(false);
     });
@@ -93,9 +96,23 @@ export default function ReportsPage() {
     refetchInterval: 4000,
   });
 
-  function downloadCSV() {
-    const url = api.getUsageCSVUrl({ from, to, tenant_id: tenantId || undefined });
-    window.open(url, "_blank");
+  function exportPDF() {
+    const tenantName = tenantId
+      ? (tenants?.data.find((t) => t.id === tenantId)?.name ?? "—")
+      : "Todos los clientes";
+
+    generateConsumptionReportPDF({
+      tenantName,
+      from,
+      to,
+      summary: data?.summary as Record<string, unknown> | undefined,
+      bundles: bundleData,
+      ips: ipsData?.data,
+      agents: agentsData?.data,
+      failures: failuresData,
+      showFailures: isAdminOrSuperAdmin,
+      generatedByUsername: username,
+    });
   }
 
   const hasFailures =
@@ -109,8 +126,8 @@ export default function ReportsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Reportes de consumo</h1>
           <p className="text-sm text-gray-500 mt-0.5">Análisis de uso por cliente y período</p>
         </div>
-        <button onClick={downloadCSV} className="btn-secondary">
-          ↓ Exportar CSV
+        <button onClick={exportPDF} className="btn-secondary">
+          ↓ Exportar PDF
         </button>
       </div>
 

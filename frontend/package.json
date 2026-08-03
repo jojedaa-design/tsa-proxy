@@ -20,6 +20,8 @@
     "tailwind-merge": "^2.4.0",
     "recharts": "^2.12.7",
     "js-cookie": "^3.0.5",
+    "jspdf": "^2.5.2",
+    "jspdf-autotable": "^3.8.4",
     "qrcode": "^1.5.4",
     "react-hook-form": "^7.52.1",
     "@hookform/resolvers": "^3.9.0",

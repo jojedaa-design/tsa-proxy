@@ -1,0 +1,298 @@
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import type { IPUsage, UserAgentStat, FailureBreakdownResponse } from "./api";
+
+// ── Colores de marca (BIGDAVI) ───────────────────────────────
+const NAVY: [number, number, number] = [11, 31, 58];
+const BLUE: [number, number, number] = [18, 116, 242];
+const GRAY_TEXT: [number, number, number] = [75, 85, 99];
+const GRAY_LIGHT: [number, number, number] = [156, 163, 175];
+const WHITE: [number, number, number] = [255, 255, 255];
+
+type BundleItem = {
+  id: string;
+  amount: number;
+  consumed: number;
+  note?: string;
+  contracted_at: string;
+};
+
+export interface ConsumptionReportInput {
+  tenantName: string;
+  from: string;
+  to: string;
+  summary?: Record<string, unknown>;
+  bundles?: BundleItem[] | null;
+  ips?: IPUsage[];
+  agents?: UserAgentStat[];
+  failures?: FailureBreakdownResponse;
+  showFailures: boolean;
+  generatedByUsername?: string;
+}
+
+const MAX_ROWS = 6;
+const MAX_FAILURE_ROWS = 5;
+
+function fmtDate(iso: string): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("es-AR");
+}
+
+function fmtLabel(key: string): string {
+  return key
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function fmtValue(v: unknown): string {
+  if (typeof v === "number") return v.toLocaleString("es-AR");
+  return String(v);
+}
+
+/**
+ * Genera un PDF ejecutivo de una sola hoja con el reporte de consumo actual
+ * y dispara la descarga en el navegador.
+ */
+export function generateConsumptionReportPDF(input: ConsumptionReportInput): void {
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 12;
+  const contentWidth = pageWidth - margin * 2;
+
+  const now = new Date();
+  const generatedAt = now.toLocaleString("es-AR", {
+    day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+  });
+
+  // ── Encabezado ──────────────────────────────────────────────
+  const headerHeight = 28;
+  doc.setFillColor(...NAVY);
+  doc.rect(0, 0, pageWidth, headerHeight, "F");
+
+  doc.setTextColor(...WHITE);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(16);
+  doc.text("BIGDAVI", margin, 12);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.text("Reporte de Consumo — TSA Proxy", margin, 19);
+  doc.setFontSize(8);
+  doc.setTextColor(200, 210, 225);
+  doc.text("Panel de Administración", margin, 24);
+
+  doc.setFontSize(8.5);
+  doc.setTextColor(...WHITE);
+  doc.text(`Generado: ${generatedAt}`, pageWidth - margin, 11, { align: "right" });
+  doc.text(`Cliente: ${input.tenantName}`, pageWidth - margin, 16, { align: "right" });
+  doc.text(`Período: ${fmtDate(input.from)} – ${fmtDate(input.to)}`, pageWidth - margin, 21, { align: "right" });
+  if (input.generatedByUsername) {
+    doc.text(`Usuario: ${input.generatedByUsername}`, pageWidth - margin, 26, { align: "right" });
+  }
+
+  let y = headerHeight + 8;
+
+  // ── Resumen del período ─────────────────────────────────────
+  const summaryEntries = Object.entries(input.summary ?? {});
+  if (summaryEntries.length > 0) {
+    doc.setTextColor(...NAVY);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.text("Resumen del período", margin, y);
+    y += 3;
+
+    autoTable(doc, {
+      startY: y,
+      margin: { left: margin, right: margin },
+      head: [summaryEntries.map(([k]) => fmtLabel(k))],
+      body: [summaryEntries.map(([, v]) => fmtValue(v))],
+      theme: "grid",
+      headStyles: { fillColor: NAVY, textColor: WHITE, fontSize: 8, halign: "center" },
+      bodyStyles: { fontSize: 11, halign: "center", fontStyle: "bold", textColor: BLUE },
+      styles: { cellPadding: 3 },
+    });
+    y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8;
+  }
+
+  // ── Bolsas contratadas y consumo ────────────────────────────
+  if (input.bundles && input.bundles.length > 0) {
+    doc.setTextColor(...NAVY);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.text("Bolsas contratadas y consumo", margin, y);
+    y += 3;
+
+    const shown = input.bundles.slice(0, MAX_ROWS);
+    autoTable(doc, {
+      startY: y,
+      margin: { left: margin, right: margin },
+      head: [["Fecha", "Cantidad", "Consumido", "Disponible", "Referencia"]],
+      body: shown.map((b) => [
+        fmtDate(b.contracted_at),
+        b.amount.toLocaleString("es-AR"),
+        b.consumed.toLocaleString("es-AR"),
+        (b.amount - b.consumed).toLocaleString("es-AR"),
+        b.note || "—",
+      ]),
+      theme: "striped",
+      headStyles: { fillColor: BLUE, textColor: WHITE, fontSize: 8 },
+      bodyStyles: { fontSize: 8, textColor: GRAY_TEXT },
+      columnStyles: {
+        1: { halign: "right" }, 2: { halign: "right" }, 3: { halign: "right" },
+      },
+    });
+    y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
+    if (input.bundles.length > MAX_ROWS) {
+      y += 4;
+      doc.setFontSize(7.5);
+      doc.setTextColor(...GRAY_LIGHT);
+      doc.setFont("helvetica", "italic");
+      doc.text(`+${input.bundles.length - MAX_ROWS} bolsa(s) adicional(es) — ver detalle completo en el panel.`, margin, y);
+    }
+    y += 8;
+  }
+
+  // ── IPs más activas / Software utilizado (dos columnas) ─────
+  const halfWidth = (contentWidth - 6) / 2;
+  const rightX = margin + halfWidth + 6;
+  const sideStartY = y;
+  let maxFinalY = y;
+
+  if (input.ips && input.ips.length > 0) {
+    doc.setTextColor(...NAVY);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.text("IPs más activas", margin, y);
+
+    autoTable(doc, {
+      startY: y + 3,
+      margin: { left: margin, right: pageWidth - margin - halfWidth },
+      tableWidth: halfWidth,
+      head: [["IP", "Cliente", "Total", "Fallidos"]],
+      body: input.ips.slice(0, MAX_ROWS).map((ip) => [
+        ip.ip, ip.tenant_name,
+        ip.requests.toLocaleString("es-AR"),
+        ip.fail_count.toLocaleString("es-AR"),
+      ]),
+      theme: "striped",
+      headStyles: { fillColor: NAVY, textColor: WHITE, fontSize: 7 },
+      bodyStyles: { fontSize: 7, textColor: GRAY_TEXT },
+      columnStyles: { 2: { halign: "right" }, 3: { halign: "right" } },
+    });
+    maxFinalY = Math.max(maxFinalY, (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY);
+  }
+
+  if (input.agents && input.agents.length > 0) {
+    doc.setTextColor(...NAVY);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.text("Software utilizado", rightX, sideStartY);
+
+    autoTable(doc, {
+      startY: sideStartY + 3,
+      margin: { left: rightX, right: margin },
+      tableWidth: halfWidth,
+      head: [["Software", "Total", "Fallidos"]],
+      body: input.agents.slice(0, MAX_ROWS).map((a) => [
+        a.user_agent.length > 28 ? a.user_agent.slice(0, 28) + "…" : a.user_agent,
+        a.requests.toLocaleString("es-AR"),
+        a.fail_count.toLocaleString("es-AR"),
+      ]),
+      theme: "striped",
+      headStyles: { fillColor: NAVY, textColor: WHITE, fontSize: 7 },
+      bodyStyles: { fontSize: 7, textColor: GRAY_TEXT },
+      columnStyles: { 1: { halign: "right" }, 2: { halign: "right" } },
+    });
+    maxFinalY = Math.max(maxFinalY, (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY);
+  }
+
+  y = maxFinalY + 8;
+
+  // ── Análisis de fallos (solo admin/superadmin) ──────────────
+  if (input.showFailures && input.failures) {
+    const hasProxyErrors = input.failures.proxy_errors.length > 0;
+    const hasAuthFailures = input.failures.auth_failures.length > 0;
+
+    if (hasProxyErrors || hasAuthFailures) {
+      const failStartY = y;
+      let failMaxY = y;
+
+      doc.setTextColor(...NAVY);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.text("Errores en el proxy", margin, y);
+
+      if (hasProxyErrors) {
+        autoTable(doc, {
+          startY: y + 3,
+          margin: { left: margin, right: pageWidth - margin - halfWidth },
+          tableWidth: halfWidth,
+          head: [["Motivo", "Casos"]],
+          body: input.failures.proxy_errors.slice(0, MAX_FAILURE_ROWS).map((f) => [
+            f.label, f.count.toLocaleString("es-AR"),
+          ]),
+          theme: "striped",
+          headStyles: { fillColor: [185, 28, 28], textColor: WHITE, fontSize: 7 },
+          bodyStyles: { fontSize: 7, textColor: GRAY_TEXT },
+          columnStyles: { 1: { halign: "right" } },
+        });
+        failMaxY = Math.max(failMaxY, (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY);
+      } else {
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "italic");
+        doc.setTextColor(...GRAY_LIGHT);
+        doc.text("Sin errores de proxy", margin, y + 6);
+        failMaxY = Math.max(failMaxY, y + 6);
+      }
+
+      doc.setTextColor(...NAVY);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.text("Conexiones rechazadas", rightX, failStartY);
+
+      if (hasAuthFailures) {
+        autoTable(doc, {
+          startY: failStartY + 3,
+          margin: { left: rightX, right: margin },
+          tableWidth: halfWidth,
+          head: [["Motivo", "Casos"]],
+          body: input.failures.auth_failures.slice(0, MAX_FAILURE_ROWS).map((f) => [
+            f.label, f.count.toLocaleString("es-AR"),
+          ]),
+          theme: "striped",
+          headStyles: { fillColor: [217, 119, 6], textColor: WHITE, fontSize: 7 },
+          bodyStyles: { fontSize: 7, textColor: GRAY_TEXT },
+          columnStyles: { 1: { halign: "right" } },
+        });
+        failMaxY = Math.max(failMaxY, (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY);
+      } else {
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "italic");
+        doc.setTextColor(...GRAY_LIGHT);
+        doc.text("Sin conexiones rechazadas", rightX, failStartY + 6);
+        failMaxY = Math.max(failMaxY, failStartY + 6);
+      }
+
+      y = failMaxY + 8;
+    }
+  }
+
+  // ── Pie de página ────────────────────────────────────────────
+  const footerY = pageHeight - 12;
+  doc.setDrawColor(...GRAY_LIGHT);
+  doc.setLineWidth(0.2);
+  doc.line(margin, footerY - 4, pageWidth - margin, footerY - 4);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7);
+  doc.setTextColor(...GRAY_LIGHT);
+  doc.text("TSA Proxy — Documento generado automáticamente. Confidencial, uso interno.", margin, footerY);
+  doc.text("Página 1 de 1", pageWidth - margin, footerY, { align: "right" });
+
+  // ── Descarga ──────────────────────────────────────────────────
+  const stamp = now.toISOString().replace(/[:.]/g, "-").slice(0, 16);
+  const safeTenant = input.tenantName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "todos";
+  doc.save(`reporte-consumo-${safeTenant}-${stamp}.pdf`);
+}

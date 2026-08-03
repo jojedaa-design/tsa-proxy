@@ -526,11 +526,6 @@ export const api = {
     );
   },
 
-  getUsageCSVUrl(params: { tenant_id?: string; from?: string; to?: string }) {
-    const q = new URLSearchParams(params as Record<string, string>);
-    return `${BASE_URL}/api/admin/v1/reports/usage.csv?${q}`;
-  },
-
   async getTopIPs(params: { from?: string; to?: string }) {
     const q = new URLSearchParams();
     if (params.from) q.set("from", params.from);

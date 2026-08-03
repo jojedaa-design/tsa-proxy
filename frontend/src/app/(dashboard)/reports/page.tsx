@@ -18,7 +18,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 const CATEGORY_LABELS: Record<string, string> = {
   auth:     "Autenticación",
-  quota:    "Cuota",
+  quota:    "Bolsa",
   rate:     "Límite de tasa",
   upstream: "Servidor Upstream",
   request:  "Solicitud",
@@ -247,7 +247,7 @@ export default function ReportsPage() {
             {/* Errores del proxy (upstream_error, quota_exceeded) */}
             <div className="p-4">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-gray-700">Errores en el proxy</h3>
+                <h3 className="text-sm font-semibold text-gray-700">Errores</h3>
                 <span className="text-xs text-gray-400">
                   {(failuresData?.total_proxy_errors ?? 0).toLocaleString()} errores
                 </span>

@@ -39,7 +39,7 @@ var failureMeta = map[string]struct{ label, category string }{
 	"ip_not_allowed":     {"IP no autorizada", "auth"},
 	"tenant_suspended":   {"Tenant suspendido", "auth"},
 	"credential_expired": {"Credencial expirada", "auth"},
-	"quota_exceeded":     {"Cuota mensual excedida", "quota"},
+	"quota_exceeded":     {"Bolsa de Sello de Tiempo agotada", "quota"},
 	"rate_limited":       {"Límite de tasa excedido", "rate"},
 	"upstream_error":     {"Error del servidor TSA", "upstream"},
 	"malformed_request":  {"Solicitud malformada", "request"},

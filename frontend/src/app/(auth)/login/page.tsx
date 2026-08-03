@@ -12,6 +12,13 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [expiredNotice, setExpiredNotice] = useState(false);
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("expired") === "1") {
+      setExpiredNotice(true);
+    }
+  }, []);
 
   // Estado 2FA (login normal, usuario ya tiene 2FA activo)
   const [mfaRequired, setMfaRequired] = useState(false);
@@ -189,6 +196,11 @@ export default function LoginPage() {
           ) : !mfaRequired ? (
             /* ── Step 1: usuario + contraseña ── */
             <form onSubmit={handleLogin} className="space-y-5">
+              {expiredNotice && (
+                <div className="rounded-md bg-amber-50 p-3 text-sm text-amber-700 border border-amber-200">
+                  Tu sesión se cerró por inactividad. Iniciá sesión nuevamente.
+                </div>
+              )}
               <div>
                 <label htmlFor="username" className="label">Usuario</label>
                 <input

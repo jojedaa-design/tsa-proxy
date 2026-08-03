@@ -1,10 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { getToken, api } from "@/lib/api";
+
+// Cierre de sesión por inactividad — 5 minutos sin interacción real del
+// usuario (mouse, teclado, touch). Deliberadamente NO se basa en actividad
+// de red: el panel hace polling automático (refetchInterval) cada pocos
+// segundos en varias páginas, que seguiría "activo" aunque el usuario esté
+// ausente y dejaría la sesión abierta indefinidamente.
+const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+const ACTIVITY_EVENTS = ["mousedown", "mousemove", "keydown", "scroll", "touchstart"] as const;
 
 const navItems = [
   { href: "/", label: "Panel de Control",  icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
@@ -20,6 +28,40 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [username, setUsername] = useState("");
   const [role, setRole] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // ── Cierre de sesión por inactividad ──────────────────────────
+  const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Arranca en 0 (no Date.now()) para que la primera llamada a resetIdleTimer
+  // en el mount NUNCA quede absorbida por el throttle de abajo — si no, un
+  // usuario que abre la página y no toca nada jamás activaría el timeout.
+  const lastActivityRef = useRef(0);
+
+  const handleIdleLogout = useCallback(async () => {
+    await api.logout();
+    router.push("/login?expired=1");
+  }, [router]);
+
+  const resetIdleTimer = useCallback(() => {
+    const now = Date.now();
+    // Throttle: no reiniciar el timer más de una vez por segundo (mousemove
+    // dispara decenas de eventos por segundo).
+    if (now - lastActivityRef.current < 1000) return;
+    lastActivityRef.current = now;
+
+    if (idleTimer.current) clearTimeout(idleTimer.current);
+    idleTimer.current = setTimeout(handleIdleLogout, IDLE_TIMEOUT_MS);
+  }, [handleIdleLogout]);
+
+  useEffect(() => {
+    resetIdleTimer();
+    ACTIVITY_EVENTS.forEach((event) =>
+      window.addEventListener(event, resetIdleTimer, { passive: true })
+    );
+    return () => {
+      if (idleTimer.current) clearTimeout(idleTimer.current);
+      ACTIVITY_EVENTS.forEach((event) => window.removeEventListener(event, resetIdleTimer));
+    };
+  }, [resetIdleTimer]);
 
   useEffect(() => {
     if (!getToken()) {

@@ -238,6 +238,10 @@ func (h *AuthHandler) CompleteTOTPSetup(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *AuthHandler) setRefreshCookie(w http.ResponseWriter, token string) {
+	// Sin MaxAge/Expires: cookie de sesión de navegador. El JWT del refresh
+	// token sigue teniendo su propio TTL (JWT_REFRESH_TTL) como backstop de
+	// seguridad server-side, pero la cookie en sí debe desaparecer al cerrar
+	// el navegador para no dejar sesiones abiertas indefinidamente.
 	http.SetCookie(w, &http.Cookie{
 		Name:     "refresh_token",
 		Value:    token,
@@ -245,7 +249,6 @@ func (h *AuthHandler) setRefreshCookie(w http.ResponseWriter, token string) {
 		HttpOnly: true,
 		Secure:   true,
 		SameSite: http.SameSiteStrictMode,
-		MaxAge:   int(7 * 24 * 3600),
 	})
 }
 

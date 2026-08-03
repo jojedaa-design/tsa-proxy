@@ -243,17 +243,19 @@ export interface TSAUpstream {
 
 const TOKEN_KEY = "tsa_access_token";
 
+// sessionStorage (no localStorage): el token debe desaparecer al cerrar el
+// navegador, no persistir entre reinicios.
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem(TOKEN_KEY);
+  return sessionStorage.getItem(TOKEN_KEY);
 }
 
 export function setToken(token: string): void {
-  localStorage.setItem(TOKEN_KEY, token);
+  sessionStorage.setItem(TOKEN_KEY, token);
 }
 
 export function clearToken(): void {
-  localStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem(TOKEN_KEY);
 }
 
 // ── Fetch wrapper ─────────────────────────────────────────────

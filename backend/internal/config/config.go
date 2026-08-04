@@ -9,6 +9,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 
+	"github.com/bigdavi/tsa-proxy/internal/crypto"
 	"github.com/bigdavi/tsa-proxy/internal/upstream"
 )
 
@@ -26,6 +27,7 @@ type Config struct {
 	Upstream UpstreamConfig
 	Proxy    ProxyConfig
 	RateLimit RateLimitConfig
+	Security  SecurityConfig
 }
 
 type ServerConfig struct {
@@ -101,6 +103,14 @@ type ProxyConfig struct {
 type RateLimitConfig struct {
 	GlobalRPS   int
 	BurstWindow int // seconds
+}
+
+type SecurityConfig struct {
+	// UpstreamCredentialsKey cifra en reposo la contraseña de tsa_upstreams
+	// (AES-256-GCM, ver internal/crypto). Opcional: sin configurar, las
+	// credenciales de upstream se guardan en texto plano como hasta ahora.
+	// 32 bytes en base64 — generar con: openssl rand -base64 32
+	UpstreamCredentialsKey []byte
 }
 
 // Load carga la configuración desde variables de entorno.
@@ -196,6 +206,24 @@ func Load() (*Config, error) {
 		if _, err := upstream.CheckAllowlist(cfg.Upstream.URL, cfg.Upstream.AllowedHosts); err != nil {
 			return nil, fmt.Errorf("TSA_UPSTREAM_URL inválida: %w", err)
 		}
+	}
+
+	// UPSTREAM_CREDENTIALS_KEY cifra en reposo la contraseña de tsa_upstreams.
+	// Opcional para no romper despliegues existentes: si falta, se guarda en
+	// texto plano (comportamiento previo) y se advierte al operador. Si está
+	// presente pero mal formada, sí se falla el arranque — una clave rota
+	// dejaría credenciales cifradas ilegibles en producción.
+	key, err := crypto.ParseKey(getEnv("UPSTREAM_CREDENTIALS_KEY", ""))
+	if err != nil {
+		return nil, fmt.Errorf("UPSTREAM_CREDENTIALS_KEY: %w", err)
+	}
+	cfg.Security = SecurityConfig{UpstreamCredentialsKey: key}
+	if key == nil {
+		log.Warn().
+			Str("component", "config").
+			Msg("UPSTREAM_CREDENTIALS_KEY no configurada: la contraseña de los upstreams TSA " +
+				"se guarda en texto plano en la base de datos. Generar con " +
+				"'openssl rand -base64 32' y configurar para cifrarla en reposo.")
 	}
 
 	return cfg, nil

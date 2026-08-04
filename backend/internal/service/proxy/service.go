@@ -106,9 +106,11 @@ func (s *Service) Process(ctx context.Context, req *Request) (*Result, *apierr.A
 	}
 
 	if quota != nil {
-		// Obtener totales: contratado (bolsas) y consumido (all-time)
-		contracted, _ := s.quotaRepo.GetTotalContracted(ctx, req.TenantID)
-		consumed, _ := s.quotaRepo.GetTotalConsumption(ctx, req.TenantID)
+		// Obtener totales: contratado (bolsas) y consumido (all-time).
+		// Cache-first — ver getCachedContracted/getOrSeedConsumed: evita dos
+		// SELECT SUM() contra Postgres en el camino crítico de cada sello.
+		contracted, _ := s.getCachedContracted(ctx, req.TenantID)
+		consumed, _ := s.getOrSeedConsumed(ctx, req.TenantID)
 
 		if consumed >= contracted && contracted > 0 {
 			// Bolsa agotada: rechazar
@@ -299,10 +301,78 @@ func (s *Service) recordUsage(
 	}
 	if err := s.quotaRepo.UpsertMonthlyAggregate(ctx, req.TenantID, year, int(month), status, lat); err != nil {
 		log.Error().Err(err).Str("tenant_id", req.TenantID.String()).Msg("failed to upsert monthly aggregate")
+	} else if s.cache != nil {
+		// Mantener el contador cacheado en sincronía con el que acabamos de
+		// escribir en Postgres. Solo si el UPSERT tuvo éxito — mejor que el
+		// cache quede rezagado (se resiembra en el próximo cache-miss) a que
+		// quede adelantado y bloquee sellos que sí deberían emitirse.
+		if _, err := s.cache.IncrBundleConsumed(ctx, req.TenantID); err != nil {
+			log.Warn().Err(err).Str("tenant_id", req.TenantID.String()).Msg("failed to increment cached consumption counter")
+		}
 	}
 
-	// Actualizar last_used en credencial
-	s.credRepo.UpdateLastUsed(ctx, req.CredentialID, req.SourceIP)
+	// Actualizar last_used en credencial — máximo una escritura por minuto y
+	// por credencial (vía Redis), ya que esta columna no se lee con
+	// precisión de segundos y reescribirla en cada sello es puro overhead.
+	s.throttledUpdateLastUsed(ctx, req.CredentialID, req.SourceIP)
+}
+
+// getCachedContracted devuelve el total contratado (suma de bolsas) del
+// tenant. Cache-aside con TTL corto: "contratado" solo cambia cuando se
+// compra una bolsa nueva (AddBundle invalida la clave explícitamente), así
+// que un TTL de respaldo alcanza incluso si la invalidación fallara.
+func (s *Service) getCachedContracted(ctx context.Context, tenantID uuid.UUID) (int, error) {
+	if s.cache != nil {
+		if v, err := s.cache.GetBundleContracted(ctx, tenantID); err == nil {
+			return v, nil
+		}
+	}
+	contracted, err := s.quotaRepo.GetTotalContracted(ctx, tenantID)
+	if err != nil {
+		return 0, err
+	}
+	if s.cache != nil {
+		go func(total int) {
+			_ = s.cache.SetBundleContracted(context.Background(), tenantID, total, 5*time.Minute)
+		}(contracted)
+	}
+	return contracted, nil
+}
+
+// getOrSeedConsumed devuelve el total consumido (all-time) del tenant desde
+// el contador cacheado. En cache-miss, lo lee de Postgres (fuente de verdad)
+// y siembra el contador con SETNX de forma síncrona — así, cuando recordUsage
+// incremente el contador para este mismo request, la clave ya existe y el
+// incremento no arranca de cero.
+func (s *Service) getOrSeedConsumed(ctx context.Context, tenantID uuid.UUID) (int, error) {
+	if s.cache != nil {
+		if v, err := s.cache.GetBundleConsumed(ctx, tenantID); err == nil {
+			return v, nil
+		}
+	}
+	consumed, err := s.quotaRepo.GetTotalConsumption(ctx, tenantID)
+	if err != nil {
+		return 0, err
+	}
+	if s.cache != nil {
+		_ = s.cache.SeedBundleConsumed(ctx, tenantID, consumed)
+	}
+	return consumed, nil
+}
+
+// throttledUpdateLastUsed actualiza last_used_at/last_used_ip de la
+// credencial como máximo una vez por minuto, usando Redis como semáforo.
+// Sin cache disponible, cae al comportamiento anterior (una escritura por sello).
+func (s *Service) throttledUpdateLastUsed(ctx context.Context, credID uuid.UUID, ip string) {
+	if s.cache == nil {
+		s.credRepo.UpdateLastUsed(ctx, credID, ip)
+		return
+	}
+	acquired, err := s.cache.TryAcquireThrottle(ctx, "cred:lastused:"+credID.String(), 60*time.Second)
+	if err != nil || acquired {
+		// Error de Redis: fail-open — mejor una escritura de más que perder el dato.
+		s.credRepo.UpdateLastUsed(ctx, credID, ip)
+	}
 }
 
 // resolveUpstreamCredentials obtiene usuario y contraseña para el upstream.

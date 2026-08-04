@@ -6,16 +6,49 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/rs/zerolog/log"
 
+	"github.com/bigdavi/tsa-proxy/internal/crypto"
 	"github.com/bigdavi/tsa-proxy/internal/model"
 )
 
 type UpstreamRepository struct {
-	pool *pgxpool.Pool
+	pool          *pgxpool.Pool
+	encryptionKey []byte // nil = sin cifrado (ver crypto.Encrypt/Decrypt)
 }
 
-func NewUpstreamRepository(pool *pgxpool.Pool) *UpstreamRepository {
-	return &UpstreamRepository{pool: pool}
+func NewUpstreamRepository(pool *pgxpool.Pool, encryptionKey []byte) *UpstreamRepository {
+	return &UpstreamRepository{pool: pool, encryptionKey: encryptionKey}
+}
+
+// decryptInPlace descifra u.Password si viene cifrado. Ante un error (clave
+// incorrecta o dato corrupto) NO devuelve el valor cifrado como si fuera la
+// contraseña real — eso rompería silenciosamente la autenticación contra la
+// TSA externa con un error de credenciales confuso. En su lugar, loguea y
+// deja el campo en nil, comportándose como "sin contraseña configurada".
+func (r *UpstreamRepository) decryptInPlace(u *model.TSAUpstream) {
+	if u == nil || u.Password == nil {
+		return
+	}
+	plain, err := crypto.Decrypt(*u.Password, r.encryptionKey)
+	if err != nil {
+		log.Error().Err(err).Str("upstream_id", u.ID.String()).
+			Msg("no se pudo descifrar la contraseña del upstream")
+		u.Password = nil
+		return
+	}
+	u.Password = &plain
+}
+
+func (r *UpstreamRepository) encryptPassword(password *string) (*string, error) {
+	if password == nil {
+		return nil, nil
+	}
+	enc, err := crypto.Encrypt(*password, r.encryptionKey)
+	if err != nil {
+		return nil, err
+	}
+	return &enc, nil
 }
 
 func (r *UpstreamRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.TSAUpstream, error) {
@@ -37,6 +70,7 @@ func (r *UpstreamRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.
 		return nil, err
 	}
 	u.HasPassword = u.Password != nil && *u.Password != ""
+	r.decryptInPlace(u)
 	return u, nil
 }
 
@@ -60,6 +94,7 @@ func (r *UpstreamRepository) GetDefault(ctx context.Context) (*model.TSAUpstream
 		return nil, err
 	}
 	u.HasPassword = u.Password != nil && *u.Password != ""
+	r.decryptInPlace(u)
 	return u, nil
 }
 
@@ -85,19 +120,24 @@ func (r *UpstreamRepository) List(ctx context.Context) ([]*model.TSAUpstream, er
 			return nil, err
 		}
 		u.HasPassword = u.Password != nil && *u.Password != ""
+		r.decryptInPlace(u)
 		upstreams = append(upstreams, u)
 	}
 	return upstreams, rows.Err()
 }
 
 func (r *UpstreamRepository) Create(ctx context.Context, u *model.TSAUpstream) (*model.TSAUpstream, error) {
+	encPassword, err := r.encryptPassword(u.Password)
+	if err != nil {
+		return nil, err
+	}
 	created := &model.TSAUpstream{}
-	err := r.pool.QueryRow(ctx, `
+	err = r.pool.QueryRow(ctx, `
 		INSERT INTO tsa_upstreams (name, url, env_key_user, env_key_pass, username, password, timeout_ms, max_retries)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
 		RETURNING id, name, url, env_key_user, env_key_pass, username, password,
 		          timeout_ms, max_retries, is_active, is_default, created_at, updated_at
-	`, u.Name, u.URL, u.EnvKeyUser, u.EnvKeyPass, u.Username, u.Password, u.TimeoutMs, u.MaxRetries).Scan(
+	`, u.Name, u.URL, u.EnvKeyUser, u.EnvKeyPass, u.Username, encPassword, u.TimeoutMs, u.MaxRetries).Scan(
 		&created.ID, &created.Name, &created.URL, &created.EnvKeyUser, &created.EnvKeyPass,
 		&created.Username, &created.Password,
 		&created.TimeoutMs, &created.MaxRetries, &created.IsActive, &created.IsDefault,
@@ -107,19 +147,24 @@ func (r *UpstreamRepository) Create(ctx context.Context, u *model.TSAUpstream) (
 		return nil, err
 	}
 	created.HasPassword = created.Password != nil && *created.Password != ""
+	r.decryptInPlace(created)
 	return created, nil
 }
 
 func (r *UpstreamRepository) Update(ctx context.Context, u *model.TSAUpstream) (*model.TSAUpstream, error) {
+	encPassword, err := r.encryptPassword(u.Password)
+	if err != nil {
+		return nil, err
+	}
 	updated := &model.TSAUpstream{}
-	err := r.pool.QueryRow(ctx, `
+	err = r.pool.QueryRow(ctx, `
 		UPDATE tsa_upstreams
 		SET name=$1, url=$2, env_key_user=$3, env_key_pass=$4, username=$5, password=$6,
 		    timeout_ms=$7, max_retries=$8, is_active=$9
 		WHERE id=$10
 		RETURNING id, name, url, env_key_user, env_key_pass, username, password,
 		          timeout_ms, max_retries, is_active, is_default, created_at, updated_at
-	`, u.Name, u.URL, u.EnvKeyUser, u.EnvKeyPass, u.Username, u.Password,
+	`, u.Name, u.URL, u.EnvKeyUser, u.EnvKeyPass, u.Username, encPassword,
 		u.TimeoutMs, u.MaxRetries, u.IsActive, u.ID).Scan(
 		&updated.ID, &updated.Name, &updated.URL, &updated.EnvKeyUser, &updated.EnvKeyPass,
 		&updated.Username, &updated.Password,
@@ -133,6 +178,7 @@ func (r *UpstreamRepository) Update(ctx context.Context, u *model.TSAUpstream) (
 		return nil, err
 	}
 	updated.HasPassword = updated.Password != nil && *updated.Password != ""
+	r.decryptInPlace(updated)
 	return updated, nil
 }
 

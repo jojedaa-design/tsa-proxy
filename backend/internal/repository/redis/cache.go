@@ -21,6 +21,15 @@ func NewCache(client *redis.Client) *Cache {
 	return &Cache{client: client}
 }
 
+// TryAcquireThrottle implementa un semáforo simple: la primera llamada dentro
+// de la ventana `window` para una `key` dada devuelve true (adquirido); las
+// siguientes devuelven false hasta que expire. Útil para limitar a una
+// escritura por período algo que se dispara en cada request pero no necesita
+// esa granularidad (p.ej. last_used_at de una credencial).
+func (c *Cache) TryAcquireThrottle(ctx context.Context, key string, window time.Duration) (bool, error) {
+	return c.client.SetNX(ctx, "throttle:"+key, 1, window).Result()
+}
+
 // ─── Credenciales ────────────────────────────────────────────
 
 func credKey(hash []byte) string {
@@ -186,6 +195,59 @@ func (c *Cache) SetTenantQuota(ctx context.Context, tenantID uuid.UUID, q *model
 
 func (c *Cache) InvalidateTenantQuota(ctx context.Context, tenantID uuid.UUID) error {
 	return c.client.Del(ctx, tenantQuotaKey(tenantID)).Err()
+}
+
+// ─── Consumo de bolsas (contratado / consumido) ────────────
+//
+// Antes de este cache, cada sello ejecutaba dos SELECT SUM() contra Postgres
+// (contratado y consumido) en el camino crítico. "Contratado" cambia poco
+// (solo al comprar una bolsa) y se cachea con TTL simple. "Consumido" crece
+// en cada sello, así que se mantiene como contador atómico en Redis
+// (INCR), sembrado desde Postgres la primera vez que se usa — si Redis
+// pierde el dato (reinicio, evicción), el siguiente acceso lo vuelve a
+// sembrar desde la fuente de verdad, sin necesidad de un job de reconciliación.
+
+func bundleContractedKey(tenantID uuid.UUID) string {
+	return fmt.Sprintf("tenant:bundle:contracted:%s", tenantID)
+}
+
+func bundleConsumedKey(tenantID uuid.UUID) string {
+	return fmt.Sprintf("tenant:bundle:consumed:%s", tenantID)
+}
+
+func (c *Cache) GetBundleContracted(ctx context.Context, tenantID uuid.UUID) (int, error) {
+	return c.client.Get(ctx, bundleContractedKey(tenantID)).Int()
+}
+
+func (c *Cache) SetBundleContracted(ctx context.Context, tenantID uuid.UUID, total int, ttl time.Duration) error {
+	return c.client.Set(ctx, bundleContractedKey(tenantID), total, ttl).Err()
+}
+
+func (c *Cache) InvalidateBundleContracted(ctx context.Context, tenantID uuid.UUID) error {
+	return c.client.Del(ctx, bundleContractedKey(tenantID)).Err()
+}
+
+func (c *Cache) GetBundleConsumed(ctx context.Context, tenantID uuid.UUID) (int, error) {
+	return c.client.Get(ctx, bundleConsumedKey(tenantID)).Int()
+}
+
+// SeedBundleConsumed inicializa el contador solo si no existe (SETNX) — no
+// pisa un contador que ya esté recibiendo incrementos de otros requests.
+func (c *Cache) SeedBundleConsumed(ctx context.Context, tenantID uuid.UUID, value int) error {
+	return c.client.SetNX(ctx, bundleConsumedKey(tenantID), value, 0).Err()
+}
+
+// IncrBundleConsumed incrementa el contador en 1. Si la clave no existe
+// (nunca se sembró), Redis la crea en 0 y la deja en 1 — un caso raro que
+// solo ocurre si el request de registro llega antes que el de lectura de
+// cuota alcance a sembrar el valor; se autocorrige en el siguiente ciclo
+// de lectura si hiciera falta.
+func (c *Cache) IncrBundleConsumed(ctx context.Context, tenantID uuid.UUID) (int64, error) {
+	return c.client.Incr(ctx, bundleConsumedKey(tenantID)).Result()
+}
+
+func (c *Cache) InvalidateBundleConsumed(ctx context.Context, tenantID uuid.UUID) error {
+	return c.client.Del(ctx, bundleConsumedKey(tenantID)).Err()
 }
 
 // ─── Basic Auth Credentials ───────────────────────────────────

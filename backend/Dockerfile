@@ -31,10 +31,18 @@ FROM alpine:3.20
 
 RUN apk add --no-cache ca-certificates tzdata wget
 
+# Sin motivo para correr como root: es un binario Go estático que solo
+# escucha en :8080 (puerto no privilegiado) y no necesita escribir en el
+# filesystem del contenedor.
+RUN addgroup --system --gid 1001 tsaproxy && \
+    adduser  --system --uid 1001 tsaproxy
+
 WORKDIR /
 
 COPY --from=builder /app/tsa-proxy /tsa-proxy
 COPY --from=builder /app/migrations /migrations
+
+USER tsaproxy
 
 EXPOSE 8080
 

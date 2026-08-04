@@ -112,11 +112,13 @@ func ResolveCredentials(envKeyUser, envKeyPass *string) (user, pass string) {
 
 // Send envía un TimeStampRequest RFC 3161 al upstream con los parámetros dados.
 // Los parámetros (URL, credenciales) se resuelven dinámicamente desde la BD.
+//
+// El timeout por request se aplica vía context (ver doRequest), no mutando
+// c.httpClient.Timeout: ese campo es compartido por todos los goroutines que
+// usan este *Client (uno solo, reutilizado para todo el proxy), así que
+// escribirlo aquí era una carrera de datos real — el timeout de un tenant
+// podía terminar aplicándose a la petición en vuelo de otro.
 func (c *Client) Send(ctx context.Context, body []byte, p SendParams) (*Response, error) {
-	// Ajustar timeout del cliente si difiere
-	if p.Timeout > 0 {
-		c.httpClient.Timeout = p.Timeout
-	}
 	if p.MaxBody <= 0 {
 		p.MaxBody = 32768
 	}
@@ -154,6 +156,14 @@ func (c *Client) Send(ctx context.Context, body []byte, p SendParams) (*Response
 
 func (c *Client) doRequest(ctx context.Context, body []byte, p SendParams) (*Response, error) {
 	start := time.Now()
+
+	// Timeout por request vía context — c.httpClient.Timeout (fijado una vez
+	// en NewClient) queda como backstop compartido y nunca se reescribe.
+	if p.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, p.Timeout)
+		defer cancel()
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.URL, bytes.NewReader(body))
 	if err != nil {

@@ -150,7 +150,12 @@ func (h *QuotasHandler) AddBundle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.cache != nil {
-		go func() { _ = h.cache.InvalidateTenantQuota(context.Background(), tenantID) }()
+		go func() {
+			_ = h.cache.InvalidateTenantQuota(context.Background(), tenantID)
+			// El total contratado cambió: invalidar para que el próximo sello
+			// lo relea de Postgres en vez de servir el TTL de hasta 5 min.
+			_ = h.cache.InvalidateBundleContracted(context.Background(), tenantID)
+		}()
 	}
 
 	go func() {

@@ -77,7 +77,7 @@ func main() {
 	usageRepo      := postgres.NewUsageRepository(pgPool)
 	auditRepo      := postgres.NewAuditRepository(pgPool)
 	failedRepo     := postgres.NewFailedRequestRepository(pgPool)
-	upstreamRepo   := postgres.NewUpstreamRepository(pgPool)
+	upstreamRepo   := postgres.NewUpstreamRepository(pgPool, cfg.Security.UpstreamCredentialsKey)
 	basicAuthRepo  := postgres.NewBasicAuthRepository(pgPool)
 	noauthRepo     := postgres.NewNoAuthRepository(pgPool)
 

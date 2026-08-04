@@ -335,6 +335,10 @@ func (h *UsersHandler) ListRoles(w http.ResponseWriter, r *http.Request) {
 
 // validateRoleAndScope valida el rol solicitado y, si es "viewer", el conjunto
 // de tenant_ids (deben existir); para admin/superadmin, tenant_ids debe venir vacío.
+//
+// El rol "viewer" está limitado a exactamente un cliente: solo ve la sección
+// "Reportes" con la información de ese cliente, nunca "todos los clientes"
+// ni varios a la vez.
 func (h *UsersHandler) validateRoleAndScope(r *http.Request, roleName string, tenantIDStrs []string) (*model.Role, []uuid.UUID, *apierr.APIError) {
 	role, err := h.repo.GetRoleByName(r.Context(), roleName)
 	if err != nil || role == nil {
@@ -343,6 +347,9 @@ func (h *UsersHandler) validateRoleAndScope(r *http.Request, roleName string, te
 
 	if role.Name != "viewer" && len(tenantIDStrs) > 0 {
 		return nil, nil, &apierr.APIError{StatusCode: http.StatusBadRequest, Code: "validation_error", Message: "tenant_ids only applies to the viewer role"}
+	}
+	if role.Name == "viewer" && len(tenantIDStrs) != 1 {
+		return nil, nil, &apierr.APIError{StatusCode: http.StatusBadRequest, Code: "validation_error", Message: "viewer role requires exactly one tenant_id"}
 	}
 
 	tenantIDs := make([]uuid.UUID, 0, len(tenantIDStrs))

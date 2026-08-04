@@ -45,16 +45,27 @@ export default function ReportsPage() {
   const [to, setTo]     = useState(() => new Date().toISOString().split("T")[0]);
   const [tenantId, setTenantId] = useState("");
   const [isAdminOrSuperAdmin, setIsAdminOrSuperAdmin] = useState(false);
+  const [isViewer, setIsViewer] = useState(false);
+  const [viewerTenant, setViewerTenant] = useState<{ id: string; name: string } | null>(null);
   const [username, setUsername] = useState("");
   const [exportingPDF, setExportingPDF] = useState(false);
 
-  // Cargar rol del usuario para determinar si puede ver "Análisis de fallos"
+  // Cargar rol del usuario para determinar qué puede ver.
+  // El rol "viewer" está limitado a un único cliente (tenant_scope_detail) —
+  // no puede listar /tenants (admin-only), así que su filtro de cliente se
+  // resuelve directo desde /auth/me, sin ese endpoint.
   useEffect(() => {
     api.me().then((user) => {
       const roles = user.roles || [];
       const hasAdminAccess = roles.includes("admin") || roles.includes("superadmin");
       setIsAdminOrSuperAdmin(hasAdminAccess);
       setUsername(user.username);
+      if (roles.includes("viewer")) {
+        setIsViewer(true);
+        const own = user.tenant_scope_detail?.[0] ?? null;
+        setViewerTenant(own);
+        setTenantId(own?.id ?? "");
+      }
     }).catch(() => {
       setIsAdminOrSuperAdmin(false);
     });
@@ -69,6 +80,7 @@ export default function ReportsPage() {
   const { data: tenants } = useQuery({
     queryKey: ["tenants-simple"],
     queryFn: () => api.listTenants({ limit: 200 }),
+    enabled: !isViewer,
     refetchInterval: 4000,
   });
 
@@ -101,9 +113,11 @@ export default function ReportsPage() {
     if (exportingPDF) return;
     setExportingPDF(true);
     try {
-      const tenantName = tenantId
-        ? (tenants?.data.find((t) => t.id === tenantId)?.name ?? "—")
-        : "Todos los clientes";
+      const tenantName = isViewer
+        ? (viewerTenant?.name ?? "—")
+        : tenantId
+          ? (tenants?.data.find((t) => t.id === tenantId)?.name ?? "—")
+          : "Todos los clientes";
 
       // El número correlativo lo asigna el backend (secuencia en BD) — si la
       // llamada falla, el PDF igual se genera, mostrando "N° —".
@@ -149,12 +163,16 @@ export default function ReportsPage() {
       <div className="flex gap-3 flex-wrap items-end">
         <div>
           <label className="label">Cliente</label>
-          <select value={tenantId} onChange={(e) => setTenantId(e.target.value)} className="input">
-            <option value="">Todos los clientes</option>
-            {tenants?.data.map((t) => (
-              <option key={t.id} value={t.id}>{t.name}</option>
-            ))}
-          </select>
+          {isViewer ? (
+            <p className="input bg-gray-50 text-gray-700">{viewerTenant?.name ?? "—"}</p>
+          ) : (
+            <select value={tenantId} onChange={(e) => setTenantId(e.target.value)} className="input">
+              <option value="">Todos los clientes</option>
+              {tenants?.data.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+          )}
         </div>
       </div>
 

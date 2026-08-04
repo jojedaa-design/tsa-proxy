@@ -393,7 +393,9 @@ export const api = {
   async me() {
     return apiFetch<{
       id: string; username: string; email: string; roles: string[];
-      tenant_scope?: string[]; totp_enabled: boolean;
+      tenant_scope?: string[];
+      tenant_scope_detail?: Array<{ id: string; name: string }>;
+      totp_enabled: boolean;
     }>("/api/admin/v1/auth/me");
   },
 

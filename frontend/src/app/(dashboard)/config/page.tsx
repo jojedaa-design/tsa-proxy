@@ -651,8 +651,9 @@ function UserModal({
   const [password, setPassword] = useState("");
   const [isActive, setIsActive] = useState(true);
   const [role, setRole] = useState("viewer");
-  const [allTenants, setAllTenants] = useState(true);
-  const [selectedTenants, setSelectedTenants] = useState<string[]>([]);
+  // "Solo lectura" (viewer) siempre está limitado a exactamente un cliente —
+  // ve únicamente "Reportes" con la información de ese cliente.
+  const [selectedTenant, setSelectedTenant] = useState("");
   const [error, setError] = useState("");
 
   const { data: rolesData } = useQuery({
@@ -677,14 +678,13 @@ function UserModal({
       setEmail(existing.email);
       setIsActive(existing.is_active);
       setRole(existing.role);
-      setAllTenants(existing.tenant_scope.length === 0);
-      setSelectedTenants(existing.tenant_scope);
+      setSelectedTenant(existing.tenant_scope[0] ?? "");
     }
   }, [existing]);
 
   const saveMut = useMutation({
     mutationFn: () => {
-      const tenantIds = role === "viewer" && !allTenants ? selectedTenants : [];
+      const tenantIds = role === "viewer" && selectedTenant ? [selectedTenant] : [];
       if (userId) {
         return api.updateUser(userId, { email, is_active: isActive, role, tenant_ids: tenantIds });
       }
@@ -695,12 +695,6 @@ function UserModal({
       setError(err.message || err.error || "Error al guardar");
     },
   });
-
-  function toggleTenant(id: string) {
-    setSelectedTenants((prev) =>
-      prev.includes(id) ? prev.filter((t) => t !== id) : [...prev, id]
-    );
-  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -768,28 +762,20 @@ function UserModal({
 
           {role === "viewer" && (
             <div className="border-t border-gray-100 pt-4">
-              <label className="flex items-center gap-2 text-sm text-gray-700 mb-3">
-                <input
-                  type="checkbox"
-                  checked={allTenants}
-                  onChange={(e) => setAllTenants(e.target.checked)}
-                />
-                Acceso a todos los clientes
-              </label>
-              {!allTenants && (
-                <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-md p-2 space-y-1">
-                  {(tenantsData?.data ?? []).map((t) => (
-                    <label key={t.id} className="flex items-center gap-2 text-sm text-gray-700 py-1">
-                      <input
-                        type="checkbox"
-                        checked={selectedTenants.includes(t.id)}
-                        onChange={() => toggleTenant(t.id)}
-                      />
-                      {t.name}
-                    </label>
-                  ))}
-                </div>
-              )}
+              <label className="label">Cliente *</label>
+              <select
+                value={selectedTenant}
+                onChange={(e) => setSelectedTenant(e.target.value)}
+                className="input"
+              >
+                <option value="">Seleccionar cliente...</option>
+                {(tenantsData?.data ?? []).map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-400 mt-1">
+                Este usuario solo verá la sección Reportes, con la información de este cliente.
+              </p>
             </div>
           )}
 
@@ -805,6 +791,7 @@ function UserModal({
             disabled={
               !email ||
               (!userId && (!username || password.length < 8)) ||
+              (role === "viewer" && !selectedTenant) ||
               saveMut.isPending
             }
             className="btn-primary"

@@ -19,10 +19,11 @@ type QuotasHandler struct {
 	quotaRepo *postgres.QuotaRepository
 	audit     *postgres.AuditRepository
 	cache     *rediscache.Cache
+	userRepo  *postgres.AdminUserRepository
 }
 
-func NewQuotasHandler(quotaRepo *postgres.QuotaRepository, audit *postgres.AuditRepository, cache *rediscache.Cache) *QuotasHandler {
-	return &QuotasHandler{quotaRepo: quotaRepo, audit: audit, cache: cache}
+func NewQuotasHandler(quotaRepo *postgres.QuotaRepository, audit *postgres.AuditRepository, cache *rediscache.Cache, userRepo *postgres.AdminUserRepository) *QuotasHandler {
+	return &QuotasHandler{quotaRepo: quotaRepo, audit: audit, cache: cache, userRepo: userRepo}
 }
 
 // Get — GET /api/admin/v1/tenants/:id/quota
@@ -203,6 +204,11 @@ func (h *QuotasHandler) GetBundleReport(w http.ResponseWriter, r *http.Request) 
 	tenantID, err := uuid.Parse(tenantIDStr)
 	if err != nil {
 		apierr.WriteError(w, r, apierr.ErrBadRequest)
+		return
+	}
+
+	if _, apiErr := resolveTenantScope(r.Context(), h.userRepo, &tenantID); apiErr != nil {
+		apierr.WriteError(w, r, apiErr)
 		return
 	}
 

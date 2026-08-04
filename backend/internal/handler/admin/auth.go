@@ -12,12 +12,13 @@ import (
 
 // AuthHandler maneja los endpoints de autenticación admin.
 type AuthHandler struct {
-	svc      *authsvc.Service
-	userRepo *postgres.AdminUserRepository
+	svc        *authsvc.Service
+	userRepo   *postgres.AdminUserRepository
+	tenantRepo *postgres.TenantRepository
 }
 
-func NewAuthHandler(svc *authsvc.Service, userRepo *postgres.AdminUserRepository) *AuthHandler {
-	return &AuthHandler{svc: svc, userRepo: userRepo}
+func NewAuthHandler(svc *authsvc.Service, userRepo *postgres.AdminUserRepository, tenantRepo *postgres.TenantRepository) *AuthHandler {
+	return &AuthHandler{svc: svc, userRepo: userRepo, tenantRepo: tenantRepo}
 }
 
 // Login autentica a un administrador.
@@ -310,17 +311,24 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 
 	// tenant_scope: solo relevante para viewer; vacío/omitido = todos los tenants.
 	var tenantScope []string
+	var tenantScopeDetail []map[string]interface{}
 	scope, _ := h.userRepo.GetTenantScope(r.Context(), user.ID)
 	for _, tid := range scope {
 		tenantScope = append(tenantScope, tid.String())
+		if tenant, err := h.tenantRepo.GetByID(r.Context(), tid); err == nil && tenant != nil {
+			tenantScopeDetail = append(tenantScopeDetail, map[string]interface{}{
+				"id": tenant.ID, "name": tenant.Name,
+			})
+		}
 	}
 
 	apierr.WriteJSON(w, http.StatusOK, map[string]interface{}{
-		"id":            user.ID,
-		"username":      user.Username,
-		"email":         user.Email,
-		"roles":         user.Roles,
-		"tenant_scope":  tenantScope,
+		"id":                  user.ID,
+		"username":            user.Username,
+		"email":               user.Email,
+		"roles":               user.Roles,
+		"tenant_scope":        tenantScope,
+		"tenant_scope_detail": tenantScopeDetail,
 		"totp_enabled":  user.TOTPEnabled,
 		"last_login_at": user.LastLoginAt,
 	})

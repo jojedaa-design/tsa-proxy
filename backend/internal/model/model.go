@@ -125,12 +125,13 @@ type TenantQuota struct {
 }
 
 type QuotaBundle struct {
-	ID           uuid.UUID  `json:"id"`
-	TenantID     uuid.UUID  `json:"tenant_id"`
-	Amount       int        `json:"amount"`
-	Note         *string    `json:"note,omitempty"`
-	CreatedBy    *uuid.UUID `json:"created_by,omitempty"`
-	ContractedAt time.Time  `json:"contracted_at"`
+	ID                    uuid.UUID  `json:"id"`
+	TenantID              uuid.UUID  `json:"tenant_id"`
+	Amount                int        `json:"amount"`
+	Note                  *string    `json:"note,omitempty"`
+	CreatedBy             *uuid.UUID `json:"created_by,omitempty"`
+	ContractedAt          time.Time  `json:"contracted_at"`
+	AlertThresholdPercent *int       `json:"alert_threshold_percent,omitempty"`
 }
 
 // ─── TSA Upstream ─────────────────────────────────────────────

@@ -26,8 +26,9 @@ type Config struct {
 	JWT      JWTConfig
 	Upstream UpstreamConfig
 	Proxy    ProxyConfig
-	RateLimit RateLimitConfig
-	Security  SecurityConfig
+	RateLimit    RateLimitConfig
+	Security     SecurityConfig
+	Notification NotificationConfig
 }
 
 type ServerConfig struct {
@@ -111,6 +112,12 @@ type SecurityConfig struct {
 	// credenciales de upstream se guardan en texto plano como hasta ahora.
 	// 32 bytes en base64 — generar con: openssl rand -base64 32
 	UpstreamCredentialsKey []byte
+}
+
+type NotificationConfig struct {
+	// BrevoAPIKey es la API key de Brevo para envío de correos transaccionales.
+	// Opcional: sin configurar, las notificaciones por correo están deshabilitadas.
+	BrevoAPIKey string
 }
 
 // Load carga la configuración desde variables de entorno.
@@ -218,6 +225,14 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("UPSTREAM_CREDENTIALS_KEY: %w", err)
 	}
 	cfg.Security = SecurityConfig{UpstreamCredentialsKey: key}
+	cfg.Notification = NotificationConfig{
+		BrevoAPIKey: getEnv("BREVO_API_KEY", ""),
+	}
+	if cfg.Notification.BrevoAPIKey == "" {
+		log.Warn().
+			Str("component", "config").
+			Msg("BREVO_API_KEY no configurada: notificaciones de consumo de bolsa deshabilitadas")
+	}
 	if key == nil {
 		log.Warn().
 			Str("component", "config").

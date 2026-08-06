@@ -255,12 +255,14 @@ function CreateTenantWizard({ onClose, onCreated }: {
 
   // Campos de entrada
   const [name, setName] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
   const [ipEntries, setIpEntries] = useState<IPEntry[]>([]);
   const [ipInput, setIpInput] = useState("");
   const [ipLabel, setIpLabel] = useState("");
   const [allowAllIPs, setAllowAllIPs] = useState(false);
   const [initialBundleAmount, setInitialBundleAmount] = useState("1000");
   const [burstPerMinute, setBurstPerMinute] = useState("10");
+  const [alertThreshold, setAlertThreshold] = useState("80");
 
   // Resultado
   const [result, setResult] = useState<CreationResult | null>(null);
@@ -289,7 +291,7 @@ function CreateTenantWizard({ onClose, onCreated }: {
       const tenant = await api.createTenant({
         name,
         slug: undefined,
-        contact_email: undefined,
+        contact_email: contactEmail.trim() || undefined,
       });
 
       // 2. Crear credencial (genera URL de firma automáticamente)
@@ -309,9 +311,11 @@ function CreateTenantWizard({ onClose, onCreated }: {
       // 4. Crear bolsa inicial y configurar ritmo
       const bundleAmount = parseInt(initialBundleAmount) || 1000;
       const burst = parseInt(burstPerMinute) || 10;
+      const threshold = parseInt(alertThreshold);
       await api.addBundle(tenant.id, {
         amount: bundleAmount,
         note: "Bolsa inicial",
+        alert_threshold_percent: threshold >= 1 && threshold <= 99 ? threshold : undefined,
       });
       await api.updateQuota(tenant.id, {
         burst_per_minute: burst,
@@ -350,6 +354,21 @@ function CreateTenantWizard({ onClose, onCreated }: {
                 placeholder="Ej: Acme Corp"
                 autoFocus
               />
+            </div>
+
+            {/* Correo de contacto */}
+            <div>
+              <label className="label">Correo de contacto</label>
+              <input
+                type="email"
+                value={contactEmail}
+                onChange={e => setContactEmail(e.target.value)}
+                className="input"
+                placeholder="alertas@empresa.com"
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                Se usa para enviar alertas de consumo de bolsa (opcional)
+              </p>
             </div>
 
             {/* Restricción de IP */}
@@ -426,6 +445,21 @@ function CreateTenantWizard({ onClose, onCreated }: {
                     min="1"
                   />
                   <p className="text-xs text-gray-400 mt-1">máximo por minuto</p>
+                </div>
+                <div className="col-span-2">
+                  <label className="label">Alerta de consumo (%)</label>
+                  <input
+                    type="number"
+                    value={alertThreshold}
+                    onChange={e => setAlertThreshold(e.target.value)}
+                    className="input"
+                    placeholder="80"
+                    min="1"
+                    max="99"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">
+                    Notifica al correo de contacto cuando la bolsa alcance este % de consumo (vacío = sin alerta)
+                  </p>
                 </div>
               </div>
             </div>

@@ -88,19 +88,19 @@ func (r *QuotaRepository) GetMonthlyUsage(ctx context.Context, tenantID uuid.UUI
 func (r *QuotaRepository) AddBundle(ctx context.Context, bundle *model.QuotaBundle) (*model.QuotaBundle, error) {
 	created := &model.QuotaBundle{}
 	err := r.pool.QueryRow(ctx, `
-		INSERT INTO quota_bundles (tenant_id, amount, note, created_by)
-		VALUES ($1,$2,$3,$4)
-		RETURNING id, tenant_id, amount, note, created_by, contracted_at
-	`, bundle.TenantID, bundle.Amount, bundle.Note, bundle.CreatedBy).Scan(
+		INSERT INTO quota_bundles (tenant_id, amount, note, created_by, alert_threshold_percent)
+		VALUES ($1,$2,$3,$4,$5)
+		RETURNING id, tenant_id, amount, note, created_by, contracted_at, alert_threshold_percent
+	`, bundle.TenantID, bundle.Amount, bundle.Note, bundle.CreatedBy, bundle.AlertThresholdPercent).Scan(
 		&created.ID, &created.TenantID, &created.Amount, &created.Note,
-		&created.CreatedBy, &created.ContractedAt,
+		&created.CreatedBy, &created.ContractedAt, &created.AlertThresholdPercent,
 	)
 	return created, err
 }
 
 func (r *QuotaRepository) ListBundles(ctx context.Context, tenantID uuid.UUID) ([]*model.QuotaBundle, error) {
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, tenant_id, amount, note, created_by, contracted_at
+		SELECT id, tenant_id, amount, note, created_by, contracted_at, alert_threshold_percent
 		FROM quota_bundles WHERE tenant_id=$1 ORDER BY contracted_at DESC
 	`, tenantID)
 	if err != nil {
@@ -110,7 +110,7 @@ func (r *QuotaRepository) ListBundles(ctx context.Context, tenantID uuid.UUID) (
 	bundles := make([]*model.QuotaBundle, 0)
 	for rows.Next() {
 		b := &model.QuotaBundle{}
-		if err := rows.Scan(&b.ID, &b.TenantID, &b.Amount, &b.Note, &b.CreatedBy, &b.ContractedAt); err != nil {
+		if err := rows.Scan(&b.ID, &b.TenantID, &b.Amount, &b.Note, &b.CreatedBy, &b.ContractedAt, &b.AlertThresholdPercent); err != nil {
 			return nil, err
 		}
 		bundles = append(bundles, b)
@@ -119,18 +119,19 @@ func (r *QuotaRepository) ListBundles(ctx context.Context, tenantID uuid.UUID) (
 }
 
 type BundleWithConsumption struct {
-	ID           uuid.UUID `json:"id"`
-	Amount       int       `json:"amount"`
-	Consumed     int       `json:"consumed"`
-	Note         *string   `json:"note,omitempty"`
-	ContractedAt time.Time `json:"contracted_at"`
+	ID                    uuid.UUID `json:"id"`
+	Amount                int       `json:"amount"`
+	Consumed              int       `json:"consumed"`
+	Note                  *string   `json:"note,omitempty"`
+	ContractedAt          time.Time `json:"contracted_at"`
+	AlertThresholdPercent *int      `json:"alert_threshold_percent,omitempty"`
 }
 
 func (r *QuotaRepository) GetBundlesWithConsumption(ctx context.Context, tenantID uuid.UUID) ([]*BundleWithConsumption, error) {
 	totalConsumed, _ := r.GetTotalConsumption(ctx, tenantID)
 
 	rows, err := r.pool.Query(ctx, `
-		SELECT id, amount, note, contracted_at
+		SELECT id, amount, note, contracted_at, alert_threshold_percent
 		FROM quota_bundles WHERE tenant_id = $1
 		ORDER BY contracted_at ASC
 	`, tenantID)
@@ -144,7 +145,7 @@ func (r *QuotaRepository) GetBundlesWithConsumption(ctx context.Context, tenantI
 
 	for rows.Next() {
 		b := &BundleWithConsumption{}
-		if err := rows.Scan(&b.ID, &b.Amount, &b.Note, &b.ContractedAt); err != nil {
+		if err := rows.Scan(&b.ID, &b.Amount, &b.Note, &b.ContractedAt, &b.AlertThresholdPercent); err != nil {
 			return nil, err
 		}
 
@@ -160,6 +161,70 @@ func (r *QuotaRepository) GetBundlesWithConsumption(ctx context.Context, tenantI
 		bundles = append(bundles, b)
 	}
 	return bundles, rows.Err()
+}
+
+// GetBundlesForAlertCheck devuelve bolsas con umbral configurado, con consumo FIFO calculado,
+// para verificar si corresponde enviar alertas de consumo. Solo bolsas no completamente consumidas.
+func (r *QuotaRepository) GetBundlesForAlertCheck(ctx context.Context, tenantID uuid.UUID) ([]*BundleWithConsumption, error) {
+	totalConsumed, err := r.GetTotalConsumption(ctx, tenantID)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := r.pool.Query(ctx, `
+		SELECT id, amount, note, contracted_at, alert_threshold_percent
+		FROM quota_bundles WHERE tenant_id = $1 AND alert_threshold_percent IS NOT NULL
+		ORDER BY contracted_at ASC
+	`, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := make([]*BundleWithConsumption, 0)
+	remaining := totalConsumed
+
+	for rows.Next() {
+		b := &BundleWithConsumption{}
+		if err := rows.Scan(&b.ID, &b.Amount, &b.Note, &b.ContractedAt, &b.AlertThresholdPercent); err != nil {
+			return nil, err
+		}
+		if remaining >= b.Amount {
+			b.Consumed = b.Amount
+			remaining -= b.Amount
+		} else {
+			b.Consumed = remaining
+			remaining = 0
+		}
+		result = append(result, b)
+	}
+	return result, rows.Err()
+}
+
+// BundleAlreadyNotified retorna true si ya se envió la notificación para esta bolsa y umbral.
+func (r *QuotaRepository) BundleAlreadyNotified(ctx context.Context, bundleID uuid.UUID, thresholdPercent int) (bool, error) {
+	var exists bool
+	err := r.pool.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM bundle_notification_log
+			WHERE bundle_id=$1 AND threshold_percent=$2
+		)
+	`, bundleID, thresholdPercent).Scan(&exists)
+	return exists, err
+}
+
+// RecordBundleNotification inserta un registro en el log de notificaciones.
+// Retorna (true, nil) si se insertó (primera vez), (false, nil) si ya existía.
+func (r *QuotaRepository) RecordBundleNotification(ctx context.Context, bundleID uuid.UUID, thresholdPercent int, brevoMessageID string) (bool, error) {
+	tag, err := r.pool.Exec(ctx, `
+		INSERT INTO bundle_notification_log (bundle_id, threshold_percent, brevo_message_id)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (bundle_id, threshold_percent) DO NOTHING
+	`, bundleID, thresholdPercent, brevoMessageID)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
 }
 
 func (r *QuotaRepository) UpsertMonthlyAggregate(ctx context.Context, tenantID uuid.UUID, year, month int, status model.UsageStatus, latencyMs int) error {

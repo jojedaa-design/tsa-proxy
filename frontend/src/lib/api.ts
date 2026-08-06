@@ -51,6 +51,7 @@ export interface QuotaBundle {
   note?: string;
   created_by?: string;
   contracted_at: string;
+  alert_threshold_percent?: number;
 }
 
 export interface APICredential {
@@ -502,7 +503,7 @@ export const api = {
     });
   },
 
-  async addBundle(tenantId: string, data: { amount: number; note?: string }) {
+  async addBundle(tenantId: string, data: { amount: number; note?: string; alert_threshold_percent?: number }) {
     return apiFetch<QuotaBundle>(`/api/admin/v1/tenants/${tenantId}/bundles`, {
       method: "POST",
       body: JSON.stringify(data),

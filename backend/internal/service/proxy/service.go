@@ -17,6 +17,7 @@ import (
 	"github.com/bigdavi/tsa-proxy/internal/repository/postgres"
 	rediscache "github.com/bigdavi/tsa-proxy/internal/repository/redis"
 	"github.com/bigdavi/tsa-proxy/internal/service/geoloc"
+	notifysvc "github.com/bigdavi/tsa-proxy/internal/service/notification"
 	"github.com/bigdavi/tsa-proxy/internal/upstream"
 )
 
@@ -48,8 +49,10 @@ type Service struct {
 	rateLimiter  *rediscache.RateLimiter
 	credRepo     *postgres.CredentialRepository
 	upstreamRepo *postgres.UpstreamRepository
+	tenantRepo   *postgres.TenantRepository
 	geolocator   *geoloc.Locator
 	cache        *rediscache.Cache
+	notifier     *notifysvc.Client
 }
 
 func NewService(
@@ -60,8 +63,10 @@ func NewService(
 	rl *rediscache.RateLimiter,
 	credRepo *postgres.CredentialRepository,
 	upstreamRepo *postgres.UpstreamRepository,
+	tenantRepo *postgres.TenantRepository,
 	geolocator *geoloc.Locator,
 	cache *rediscache.Cache,
+	notifier *notifysvc.Client,
 ) *Service {
 	return &Service{
 		cfg:          cfg,
@@ -71,8 +76,10 @@ func NewService(
 		rateLimiter:  rl,
 		credRepo:     credRepo,
 		upstreamRepo: upstreamRepo,
+		tenantRepo:   tenantRepo,
 		geolocator:   geolocator,
 		cache:        cache,
+		notifier:     notifier,
 	}
 }
 
@@ -309,6 +316,11 @@ func (s *Service) recordUsage(
 		if _, err := s.cache.IncrBundleConsumed(ctx, req.TenantID); err != nil {
 			log.Warn().Err(err).Str("tenant_id", req.TenantID.String()).Msg("failed to increment cached consumption counter")
 		}
+
+		// Comprobar umbrales de alerta (asíncrono, no bloquea).
+		if s.notifier != nil && s.notifier.Enabled() {
+			go s.checkBundleAlerts(context.Background(), req.TenantID)
+		}
 	}
 
 	// Actualizar last_used en credencial — máximo una escritura por minuto y
@@ -396,6 +408,83 @@ func resolveUpstreamCredentials(u *model.TSAUpstream, cfg *config.Config) (user,
 		pass = cfg.Upstream.Password
 	}
 	return
+}
+
+// checkBundleAlerts verifica si alguna bolsa con umbral configurado ha cruzado
+// el porcentaje de consumo y, si aún no se notificó, envía el correo de alerta.
+// Usa Redis como throttle para ejecutarse como máximo una vez por minuto por tenant.
+func (s *Service) checkBundleAlerts(ctx context.Context, tenantID uuid.UUID) {
+	// Throttle: evitar chequeos excesivos en tenants con alto volumen.
+	if s.cache != nil {
+		acquired, err := s.cache.TryAcquireThrottle(ctx, "notify:check:"+tenantID.String(), 60*time.Second)
+		if err == nil && !acquired {
+			return // ya se chequeó en el último minuto
+		}
+	}
+
+	// Obtener contact_email del tenant
+	tenant, err := s.tenantRepo.GetByID(ctx, tenantID)
+	if err != nil || tenant == nil || tenant.ContactEmail == nil || *tenant.ContactEmail == "" {
+		return // sin correo configurado, nada que hacer
+	}
+
+	// Obtener bolsas con consumo FIFO y umbral configurado
+	bundles, err := s.quotaRepo.GetBundlesForAlertCheck(ctx, tenantID)
+	if err != nil || len(bundles) == 0 {
+		return
+	}
+
+	for _, b := range bundles {
+		if b.AlertThresholdPercent == nil || b.Amount == 0 {
+			continue
+		}
+		threshold := *b.AlertThresholdPercent
+		pct := b.Consumed * 100 / b.Amount
+		if pct < threshold {
+			continue // aún no alcanzó el umbral
+		}
+
+		// Verificar idempotencia antes de enviar
+		already, err := s.quotaRepo.BundleAlreadyNotified(ctx, b.ID, threshold)
+		if err != nil || already {
+			continue // ya notificado o error de BD
+		}
+
+		// Enviar correo
+		bundleNote := ""
+		if b.Note != nil {
+			bundleNote = *b.Note
+		}
+		msgID, err := s.notifier.SendBundleAlert(ctx, notifysvc.BundleAlertParams{
+			To:               *tenant.ContactEmail,
+			TenantName:       tenant.Name,
+			BundleNote:       bundleNote,
+			Consumed:         b.Consumed,
+			Amount:           b.Amount,
+			ThresholdPercent: threshold,
+		})
+		if err != nil {
+			log.Warn().
+				Err(err).
+				Str("tenant_id", tenantID.String()).
+				Str("bundle_id", b.ID.String()).
+				Msg("failed to send bundle alert email")
+			continue // no registrar: se reintentará en el próximo ciclo
+		}
+
+		// Registrar envío (ON CONFLICT DO NOTHING protege de concurrencia rara)
+		if _, err := s.quotaRepo.RecordBundleNotification(ctx, b.ID, threshold, msgID); err != nil {
+			log.Warn().Err(err).Str("bundle_id", b.ID.String()).Msg("failed to record bundle notification")
+		}
+
+		log.Info().
+			Str("tenant_id", tenantID.String()).
+			Str("bundle_id", b.ID.String()).
+			Int("threshold_pct", threshold).
+			Str("brevo_message_id", msgID).
+			Str("to", *tenant.ContactEmail).
+			Msg("bundle alert email sent")
+	}
 }
 
 // secondsUntilEndOfMonth calcula los segundos hasta fin del mes actual + buffer.

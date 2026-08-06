@@ -121,8 +121,9 @@ func (h *QuotasHandler) AddBundle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Amount int     `json:"amount"`
-		Note   *string `json:"note,omitempty"`
+		Amount                int     `json:"amount"`
+		Note                  *string `json:"note,omitempty"`
+		AlertThresholdPercent *int    `json:"alert_threshold_percent,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		apierr.WriteError(w, r, apierr.ErrBadRequest)
@@ -135,14 +136,21 @@ func (h *QuotasHandler) AddBundle(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if req.AlertThresholdPercent != nil && (*req.AlertThresholdPercent < 1 || *req.AlertThresholdPercent > 99) {
+		apierr.WriteValidationError(w, r, map[string]string{
+			"alert_threshold_percent": "must be between 1 and 99",
+		})
+		return
+	}
 
 	actorID, _ := middleware.GetAdminUserID(r.Context())
 
 	bundle, err := h.quotaRepo.AddBundle(r.Context(), &model.QuotaBundle{
-		TenantID:  tenantID,
-		Amount:    req.Amount,
-		Note:      req.Note,
-		CreatedBy: &actorID,
+		TenantID:              tenantID,
+		Amount:                req.Amount,
+		Note:                  req.Note,
+		CreatedBy:             &actorID,
+		AlertThresholdPercent: req.AlertThresholdPercent,
 	})
 	if err != nil {
 		apierr.WriteError(w, r, apierr.ErrInternal)

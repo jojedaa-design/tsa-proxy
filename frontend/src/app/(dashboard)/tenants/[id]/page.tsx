@@ -665,6 +665,7 @@ function QuotaForm({ tenantId, initialQuota }: {
   const [bundles, setBundles] = useState<any[]>([]);
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
+  const [alertThreshold, setAlertThreshold] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -685,11 +686,13 @@ function QuotaForm({ tenantId, initialQuota }: {
     mutationFn: () => api.addBundle(tenantId, {
       amount: parseInt(amount),
       note: note || undefined,
+      alert_threshold_percent: alertThreshold ? parseInt(alertThreshold) : undefined,
     }),
     onSuccess: () => {
       setShowModal(false);
       setAmount("");
       setNote("");
+      setAlertThreshold("");
       api.listBundles(tenantId).then(setBundles);
       qc.invalidateQueries({ queryKey: ["quota", tenantId] });
     },
@@ -712,24 +715,45 @@ function QuotaForm({ tenantId, initialQuota }: {
 
       {showModal && (
         <div className="fixed inset-0 bg-black/30 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg p-6 max-w-sm w-full">
-            <h3 className="text-lg font-semibold mb-4">Nueva bolsa</h3>
-            <input
-              type="number"
-              placeholder="Cantidad de sellos"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="input mb-3 w-full"
-              min="1"
-            />
-            <input
-              type="text"
-              placeholder="Referencia (nº factura, etc.)"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              className="input mb-4 w-full"
-            />
-            <div className="flex gap-3">
+          <div className="bg-white rounded-lg p-6 max-w-sm w-full space-y-3">
+            <h3 className="text-lg font-semibold">Nueva bolsa</h3>
+            <div>
+              <label className="label">Cantidad de sellos *</label>
+              <input
+                type="number"
+                placeholder="1000"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="input w-full"
+                min="1"
+              />
+            </div>
+            <div>
+              <label className="label">Referencia</label>
+              <input
+                type="text"
+                placeholder="Nº factura, descripción…"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                className="input w-full"
+              />
+            </div>
+            <div>
+              <label className="label">Alerta de consumo (%)</label>
+              <input
+                type="number"
+                placeholder="80"
+                value={alertThreshold}
+                onChange={(e) => setAlertThreshold(e.target.value)}
+                className="input w-full"
+                min="1"
+                max="99"
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                Envía un correo al contact_email del cliente cuando se consuma este % de la bolsa (opcional)
+              </p>
+            </div>
+            <div className="flex gap-3 pt-1">
               <button onClick={() => setShowModal(false)} className="btn flex-1">Cancelar</button>
               <button
                 onClick={() => addBundle.mutate()}
@@ -753,6 +777,7 @@ function QuotaForm({ tenantId, initialQuota }: {
                   <th className="text-left py-3 pr-4">Fecha</th>
                   <th className="text-right py-3 px-4">Cantidad</th>
                   <th className="text-left py-3 pl-4">Referencia</th>
+                  <th className="text-center py-3 px-4">Alerta</th>
                 </tr>
               </thead>
               <tbody>
@@ -761,6 +786,11 @@ function QuotaForm({ tenantId, initialQuota }: {
                     <td className="py-3 pr-4">{new Date(b.contracted_at).toLocaleDateString()}</td>
                     <td className="text-right font-medium py-3 px-4">{b.amount}</td>
                     <td className="text-gray-600 py-3 pl-4">{b.note || "—"}</td>
+                    <td className="text-center py-3 px-4">
+                      {b.alert_threshold_percent
+                        ? <span className="badge badge-yellow">{b.alert_threshold_percent}%</span>
+                        : <span className="text-gray-300">—</span>}
+                    </td>
                   </tr>
                 ))}
               </tbody>

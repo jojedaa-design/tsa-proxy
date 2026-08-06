@@ -23,6 +23,7 @@ import (
 	basicauthsvc "github.com/bigdavi/tsa-proxy/internal/service/basicauth"
 	credsvc "github.com/bigdavi/tsa-proxy/internal/service/credential"
 	"github.com/bigdavi/tsa-proxy/internal/service/geoloc"
+	notifysvc "github.com/bigdavi/tsa-proxy/internal/service/notification"
 	proxysvc "github.com/bigdavi/tsa-proxy/internal/service/proxy"
 	tenantsvc "github.com/bigdavi/tsa-proxy/internal/service/tenant"
 	"github.com/bigdavi/tsa-proxy/internal/upstream"
@@ -103,7 +104,8 @@ func main() {
 	tenantService := tenantsvc.NewService(tenantRepo, cache, auditRepo)
 	credService      := credsvc.NewService(credRepo, cache)
 	basicAuthService := basicauthsvc.NewService(basicAuthRepo, cache)
-	proxyService  := proxysvc.NewService(cfg, tsaClient, quotaRepo, usageRepo, rateLimiter, credRepo, upstreamRepo, geolocator, cache)
+	notifyClient := notifysvc.New(cfg.Notification.BrevoAPIKey)
+	proxyService  := proxysvc.NewService(cfg, tsaClient, quotaRepo, usageRepo, rateLimiter, credRepo, upstreamRepo, tenantRepo, geolocator, cache, notifyClient)
 
 	// ── Middlewares ───────────────────────────────────────────────
 	authMW      := middleware.NewAuthMiddleware(credRepo, cache, failedRepo)

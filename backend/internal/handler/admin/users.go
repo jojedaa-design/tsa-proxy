@@ -2,6 +2,7 @@ package admin
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -166,7 +167,14 @@ func (h *UsersHandler) Create(w http.ResponseWriter, r *http.Request) {
 		PasswordHash: hash,
 	})
 	if err != nil {
-		apierr.WriteError(w, r, apierr.ErrConflict)
+		switch {
+		case errors.Is(err, postgres.ErrUsernameTaken):
+			apierr.WriteError(w, r, apierr.ErrUsernameTaken)
+		case errors.Is(err, postgres.ErrEmailTaken):
+			apierr.WriteError(w, r, apierr.ErrEmailTaken)
+		default:
+			apierr.WriteError(w, r, apierr.ErrConflict)
+		}
 		return
 	}
 
@@ -224,7 +232,11 @@ func (h *UsersHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	updated, err := h.repo.Update(r.Context(), id, req.Email, isActive)
 	if err != nil {
-		apierr.WriteError(w, r, apierr.ErrInternal)
+		if errors.Is(err, postgres.ErrEmailTaken) {
+			apierr.WriteError(w, r, apierr.ErrEmailTaken)
+		} else {
+			apierr.WriteError(w, r, apierr.ErrInternal)
+		}
 		return
 	}
 	if updated == nil {

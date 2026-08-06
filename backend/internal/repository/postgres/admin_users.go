@@ -2,14 +2,24 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/bigdavi/tsa-proxy/internal/model"
+)
+
+// ErrUsernameTaken / ErrEmailTaken distinguen qué campo violó la restricción
+// UNIQUE al crear un usuario, para poder devolver un mensaje de validación
+// específico en vez de un "conflict" genérico.
+var (
+	ErrUsernameTaken = errors.New("username already exists")
+	ErrEmailTaken    = errors.New("email already exists")
 )
 
 type AdminUserRepository struct {
@@ -106,7 +116,19 @@ func (r *AdminUserRepository) Create(ctx context.Context, u *model.AdminUser) (*
 		&created.ID, &created.Username, &created.Email,
 		&created.IsActive, &created.CreatedAt, &created.UpdatedAt,
 	)
-	return created, err
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			switch pgErr.ConstraintName {
+			case "admin_users_username_key":
+				return nil, ErrUsernameTaken
+			case "admin_users_email_key":
+				return nil, ErrEmailTaken
+			}
+		}
+		return nil, err
+	}
+	return created, nil
 }
 
 func (r *AdminUserRepository) AssignRole(ctx context.Context, userID, roleID, grantedBy uuid.UUID) error {
@@ -243,6 +265,10 @@ func (r *AdminUserRepository) Update(ctx context.Context, id uuid.UUID, email st
 		return nil, nil
 	}
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "admin_users_email_key" {
+			return nil, ErrEmailTaken
+		}
 		return nil, fmt.Errorf("update admin user: %w", err)
 	}
 	u.Roles, _ = r.GetRoles(ctx, u.ID)

@@ -34,6 +34,8 @@ var (
 	ErrNotFound         = &APIError{StatusCode: http.StatusNotFound,              Code: "not_found"}
 	ErrBadRequest       = &APIError{StatusCode: http.StatusBadRequest,            Code: "bad_request"}
 	ErrConflict         = &APIError{StatusCode: http.StatusConflict,              Code: "conflict"}
+	ErrUsernameTaken    = &APIError{StatusCode: http.StatusConflict, Code: "username_taken", Message: "El nombre de usuario ya está en uso"}
+	ErrEmailTaken       = &APIError{StatusCode: http.StatusConflict, Code: "email_taken", Message: "El email ya está en uso por otro usuario"}
 )
 
 // errorResponse es la estructura JSON enviada al cliente.

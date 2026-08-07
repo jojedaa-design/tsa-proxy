@@ -38,18 +38,18 @@ func (c *Client) Enabled() bool {
 
 // BundleAlertParams contiene los datos para construir el correo de alerta.
 type BundleAlertParams struct {
-	To               string // dirección destinatario
-	TenantName       string // nombre del cliente
-	BundleNote       string // referencia / descripción de la bolsa
-	Consumed         int    // sellos consumidos de esta bolsa (FIFO)
-	Amount           int    // total de sellos de la bolsa
-	ThresholdPercent int    // umbral que disparó la alerta
+	To               []string // destinatarios (primario + adicionales)
+	TenantName       string   // nombre del cliente
+	BundleNote       string   // referencia / descripción de la bolsa
+	Consumed         int      // sellos consumidos de esta bolsa (FIFO)
+	Amount           int      // total de sellos de la bolsa
+	ThresholdPercent int      // umbral que disparó la alerta
 }
 
-// SendBundleAlert envía un correo de alerta de consumo de bolsa.
-// Retorna el messageId de Brevo (para tracking futuro) o error.
+// SendBundleAlert envía un correo de alerta de consumo de bolsa a todos los destinatarios.
+// Retorna el messageId de Brevo del primer envío (para tracking) o error.
 func (c *Client) SendBundleAlert(ctx context.Context, p BundleAlertParams) (string, error) {
-	if !c.Enabled() {
+	if !c.Enabled() || len(p.To) == 0 {
 		return "", nil
 	}
 
@@ -120,16 +120,19 @@ body { font-family: Arial, sans-serif; color: #222; margin: 0; padding: 0; backg
 
 	subject := fmt.Sprintf("Alerta de consumo: %s ha consumido el %d%% de su bolsa", p.TenantName, pct)
 
+	toList := make([]map[string]string, 0, len(p.To))
+	for _, addr := range p.To {
+		toList = append(toList, map[string]string{"email": addr})
+	}
+
 	payload := map[string]interface{}{
 		"sender": map[string]string{
 			"name":  "BIGDAVI TSA",
 			"email": "noreply@bigdavi.com",
 		},
-		"to": []map[string]string{
-			{"email": p.To, "name": p.TenantName},
-		},
-		"subject":      subject,
-		"htmlContent":  htmlBody,
+		"to":          toList,
+		"subject":     subject,
+		"htmlContent": htmlBody,
 	}
 
 	body, err := json.Marshal(payload)
@@ -164,6 +167,94 @@ body { font-family: Arial, sans-serif; color: #222; margin: 0; padding: 0; backg
 		return "", fmt.Errorf("notification: decode response: %w", err)
 	}
 	return result.MessageID, nil
+}
+
+// SendTestAlert envía un correo de prueba a los destinatarios indicados.
+func (c *Client) SendTestAlert(ctx context.Context, tenantName string, to []string) error {
+	if !c.Enabled() || len(to) == 0 {
+		return nil
+	}
+
+	htmlBody := fmt.Sprintf(`
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8"><style>
+body { font-family: Arial, sans-serif; color: #222; margin: 0; padding: 0; background: #f4f6f9; }
+.container { max-width: 520px; margin: 32px auto; background: #fff; border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.1); overflow: hidden; }
+.header { background: #0B1F3A; padding: 24px 32px; }
+.header h1 { color: #fff; margin: 0; font-size: 20px; }
+.header p { color: #8ca3c0; margin: 4px 0 0; font-size: 13px; }
+.body { padding: 28px 32px; }
+.info-box { background: #e0f2fe; border-left: 4px solid #1274F2; border-radius: 4px;
+  padding: 14px 16px; margin-bottom: 20px; }
+.info-box p { margin: 0; font-size: 14px; color: #0c4a6e; }
+.footer { padding: 16px 32px; border-top: 1px solid #e5e7eb; font-size: 12px; color: #999; }
+</style></head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>BIGDAVI — Prueba de alerta</h1>
+    <p>Sistema de Sellos de Tiempo (TSA)</p>
+  </div>
+  <div class="body">
+    <div class="info-box">
+      <p>Este es un correo de <strong>prueba</strong> para verificar que las alertas de consumo de bolsa
+      lleguen correctamente al cliente <strong>%s</strong>.</p>
+    </div>
+    <p style="font-size:13px;color:#555;">
+      Si recibió este mensaje, la configuración de alertas está funcionando correctamente.
+      Recibirá notificaciones similares cuando el consumo de sellos de tiempo alcance
+      el umbral configurado para cada bolsa.
+    </p>
+  </div>
+  <div class="footer">
+    Documento generado automáticamente. Confidencial, uso interno.<br>
+    BIGDAVI — Panel de Administración TSA
+  </div>
+</div>
+</body></html>`, tenantName)
+
+	toList := make([]map[string]string, 0, len(to))
+	for _, addr := range to {
+		toList = append(toList, map[string]string{"email": addr})
+	}
+
+	payload := map[string]interface{}{
+		"sender": map[string]string{
+			"name":  "BIGDAVI TSA",
+			"email": "noreply@bigdavi.com",
+		},
+		"to":          toList,
+		"subject":     fmt.Sprintf("[PRUEBA] Alerta de consumo TSA — %s", tenantName),
+		"htmlContent": htmlBody,
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("notification: marshal test payload: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, brevoSendURL, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("notification: build test request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("api-key", c.apiKey)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return fmt.Errorf("notification: http test: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		var errBody map[string]interface{}
+		_ = json.NewDecoder(resp.Body).Decode(&errBody)
+		return fmt.Errorf("notification: brevo status %d: %v", resp.StatusCode, errBody)
+	}
+	return nil
 }
 
 func formatNum(n int) string {

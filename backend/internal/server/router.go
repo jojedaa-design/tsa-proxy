@@ -37,6 +37,7 @@ type Deps struct {
 	// Admin handlers adicionales
 	AdminBasicAuth *adminhandler.BasicAuthHandler
 	AdminNoAuth    *adminhandler.NoAuthHandler
+	AdminAlerts    *adminhandler.AlertsHandler
 }
 
 // NewRouter construye el árbol de rutas completo.
@@ -162,6 +163,12 @@ func NewRouter(d *Deps) http.Handler {
 
 						r.Get("/basic-auth",  d.AdminBasicAuth.ListByTenant)
 						r.Post("/basic-auth", d.AdminBasicAuth.Create)
+
+						// Alert emails adicionales
+						r.Get("/alert-emails",  d.AdminAlerts.List)
+						r.Post("/alert-emails", d.AdminAlerts.Add)
+						r.Post("/alert-emails/test", d.AdminAlerts.Test)
+						r.Delete("/alert-emails/{emailId}", d.AdminAlerts.Delete)
 
 						// No-Auth Access (acceso por IP sin credenciales)
 						r.Get("/noauth",          d.AdminNoAuth.GetByTenant)

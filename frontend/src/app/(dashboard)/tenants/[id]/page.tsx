@@ -4,9 +4,9 @@ import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { api, BasicAuthCredential } from "@/lib/api";
+import { api, BasicAuthCredential, AlertEmail } from "@/lib/api";
 
-type Tab = "credentials" | "ip-allowlist" | "quota" | "basic-auth" | "noauth";
+type Tab = "credentials" | "ip-allowlist" | "quota" | "basic-auth" | "noauth" | "alerts";
 
 export default function TenantDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -63,6 +63,18 @@ export default function TenantDetailPage() {
     enabled: tab === "noauth",
     refetchInterval: 4000,
   });
+
+  const { data: alertEmails } = useQuery({
+    queryKey: ["alert-emails", id],
+    queryFn: () => api.listAlertEmails(id),
+    enabled: tab === "alerts",
+  });
+
+  const [newAlertEmail, setNewAlertEmail] = useState("");
+  const [newAlertLabel, setNewAlertLabel] = useState("");
+  const [editContactEmail, setEditContactEmail] = useState<string | null>(null);
+  const [alertSuccess, setAlertSuccess] = useState("");
+  const [testResult, setTestResult] = useState<string[] | null>(null);
 
   const createCredMut = useMutation({
     mutationFn: () => api.createCredential(id, { name: newCredName || undefined }),
@@ -140,6 +152,45 @@ export default function TenantDetailPage() {
     onError: () => setError("Error al eliminar acceso TSP"),
   });
 
+  const addAlertEmailMut = useMutation({
+    mutationFn: () => api.addAlertEmail(id, { email: newAlertEmail, label: newAlertLabel || undefined }),
+    onSuccess: () => {
+      setNewAlertEmail("");
+      setNewAlertLabel("");
+      qc.invalidateQueries({ queryKey: ["alert-emails", id] });
+    },
+    onError: () => setError("Error al agregar correo. ¿Ya existe?"),
+  });
+
+  const deleteAlertEmailMut = useMutation({
+    mutationFn: (emailId: string) => api.deleteAlertEmail(id, emailId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["alert-emails", id] }),
+  });
+
+  const updateContactEmailMut = useMutation({
+    mutationFn: () => api.updateTenant(id, {
+      name: tenant?.name ?? "",
+      description: tenant?.description,
+      contact_email: editContactEmail !== null ? (editContactEmail || undefined) : (tenant?.contact_email || undefined),
+    }),
+    onSuccess: () => {
+      setEditContactEmail(null);
+      setAlertSuccess("Correo de contacto actualizado");
+      setTimeout(() => setAlertSuccess(""), 3000);
+      qc.invalidateQueries({ queryKey: ["tenant", id] });
+    },
+    onError: () => setError("Error al actualizar el correo de contacto"),
+  });
+
+  const testAlertMut = useMutation({
+    mutationFn: () => api.testAlertEmails(id),
+    onSuccess: (data) => {
+      setTestResult(data.sent_to);
+      setTimeout(() => setTestResult(null), 6000);
+    },
+    onError: () => setError("Error al enviar correo de prueba. Verifica la configuración de Brevo."),
+  });
+
   if (isLoading) return <div className="text-gray-400 py-8 text-center">Cargando...</div>;
   if (!tenant) return <div className="text-red-600">Cliente no encontrado</div>;
 
@@ -162,7 +213,7 @@ export default function TenantDetailPage() {
       {/* Tabs */}
       <div className="border-b border-gray-200">
         <div className="flex gap-6">
-          {(["credentials", "basic-auth", "noauth", "ip-allowlist", "quota"] as Tab[]).map((t) => (
+          {(["credentials", "basic-auth", "noauth", "ip-allowlist", "quota", "alerts"] as Tab[]).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -175,7 +226,8 @@ export default function TenantDetailPage() {
               {t === "credentials"  ? "Credenciales API" :
                t === "basic-auth"   ? "Acceso TSA Privado" :
                t === "noauth"       ? "Acceso TSP" :
-               t === "ip-allowlist" ? "IP Allowlist" : "Bolsa Contratada"}
+               t === "ip-allowlist" ? "IP Allowlist" :
+               t === "quota"        ? "Bolsa Contratada" : "Alertas"}
             </button>
           ))}
         </div>
@@ -651,6 +703,123 @@ export default function TenantDetailPage() {
       {/* Tab: Cuota */}
       {tab === "quota" && quota && (
         <QuotaForm tenantId={id} initialQuota={quota} />
+      )}
+
+      {/* Tab: Alertas */}
+      {tab === "alerts" && (
+        <div className="space-y-6">
+          {alertSuccess && (
+            <div className="text-sm text-green-700 bg-green-50 border border-green-200 rounded p-3">
+              ✓ {alertSuccess}
+            </div>
+          )}
+          {testResult && (
+            <div className="text-sm text-blue-700 bg-blue-50 border border-blue-200 rounded p-3">
+              <strong>Correo de prueba enviado a:</strong>
+              <ul className="mt-1 list-disc list-inside">
+                {testResult.map((addr) => <li key={addr}>{addr}</li>)}
+              </ul>
+            </div>
+          )}
+
+          {/* Correo de contacto principal */}
+          <div className="card p-6 space-y-4">
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">Correo de contacto principal</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                Este es el correo registrado del cliente. Recibirá todas las alertas de consumo de bolsa.
+              </p>
+            </div>
+            <div className="flex gap-3 items-center">
+              <input
+                type="email"
+                value={editContactEmail !== null ? editContactEmail : (tenant.contact_email ?? "")}
+                onChange={(e) => setEditContactEmail(e.target.value)}
+                className="input flex-1"
+                placeholder="correo@ejemplo.com"
+              />
+              <button
+                onClick={() => updateContactEmailMut.mutate()}
+                disabled={updateContactEmailMut.isPending}
+                className="btn-primary whitespace-nowrap"
+              >
+                {updateContactEmailMut.isPending ? "Guardando..." : "Guardar"}
+              </button>
+            </div>
+          </div>
+
+          {/* Correos adicionales */}
+          <div className="card p-6 space-y-4">
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">Correos adicionales</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                Agrega destinatarios extra que también recibirán las alertas.
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <input
+                type="email"
+                value={newAlertEmail}
+                onChange={(e) => setNewAlertEmail(e.target.value)}
+                className="input flex-1"
+                placeholder="correo@ejemplo.com"
+              />
+              <input
+                type="text"
+                value={newAlertLabel}
+                onChange={(e) => setNewAlertLabel(e.target.value)}
+                className="input w-40"
+                placeholder="Etiqueta (opcional)"
+              />
+              <button
+                onClick={() => addAlertEmailMut.mutate()}
+                disabled={addAlertEmailMut.isPending || !newAlertEmail}
+                className="btn-primary whitespace-nowrap"
+              >
+                {addAlertEmailMut.isPending ? "Agregando..." : "+ Agregar"}
+              </button>
+            </div>
+
+            {(!alertEmails || alertEmails.length === 0) ? (
+              <p className="text-sm text-gray-400 bg-gray-50 border border-gray-100 rounded p-3">
+                Sin correos adicionales. Las alertas solo llegarán al correo de contacto principal.
+              </p>
+            ) : (
+              <div className="divide-y divide-gray-100 border rounded-lg overflow-hidden">
+                {alertEmails.map((ae: AlertEmail) => (
+                  <div key={ae.id} className="flex items-center justify-between px-4 py-3 bg-white hover:bg-gray-50">
+                    <div>
+                      <span className="text-sm text-gray-800">{ae.email}</span>
+                      {ae.label && <span className="ml-3 text-xs text-gray-400">{ae.label}</span>}
+                    </div>
+                    <button
+                      onClick={() => { if (confirm(`¿Eliminar ${ae.email}?`)) deleteAlertEmailMut.mutate(ae.id); }}
+                      className="text-red-400 hover:text-red-600 text-sm"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Prueba de envío */}
+          <div className="card p-6">
+            <h2 className="text-base font-semibold text-gray-900 mb-1">Probar envío de alertas</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              Envía un correo de prueba a todos los destinatarios configurados para verificar que las alertas llegan correctamente.
+            </p>
+            <button
+              onClick={() => testAlertMut.mutate()}
+              disabled={testAlertMut.isPending}
+              className="btn-primary"
+            >
+              {testAlertMut.isPending ? "Enviando..." : "Enviar correo de prueba"}
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );

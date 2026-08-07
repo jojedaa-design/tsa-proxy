@@ -77,10 +77,11 @@ func main() {
 	quotaRepo      := postgres.NewQuotaRepository(pgPool)
 	usageRepo      := postgres.NewUsageRepository(pgPool)
 	auditRepo      := postgres.NewAuditRepository(pgPool)
-	failedRepo     := postgres.NewFailedRequestRepository(pgPool)
-	upstreamRepo   := postgres.NewUpstreamRepository(pgPool, cfg.Security.UpstreamCredentialsKey)
-	basicAuthRepo  := postgres.NewBasicAuthRepository(pgPool)
-	noauthRepo     := postgres.NewNoAuthRepository(pgPool)
+	failedRepo      := postgres.NewFailedRequestRepository(pgPool)
+	upstreamRepo    := postgres.NewUpstreamRepository(pgPool, cfg.Security.UpstreamCredentialsKey)
+	basicAuthRepo   := postgres.NewBasicAuthRepository(pgPool)
+	noauthRepo      := postgres.NewNoAuthRepository(pgPool)
+	alertEmailRepo  := postgres.NewAlertEmailRepository(pgPool)
 
 	cache      := rediscache.NewCache(redisClient)
 	rateLimiter := rediscache.NewRateLimiter(redisClient).WithFailedRepo(failedRepo)
@@ -105,7 +106,7 @@ func main() {
 	credService      := credsvc.NewService(credRepo, cache)
 	basicAuthService := basicauthsvc.NewService(basicAuthRepo, cache)
 	notifyClient := notifysvc.New(cfg.Notification.BrevoAPIKey)
-	proxyService  := proxysvc.NewService(cfg, tsaClient, quotaRepo, usageRepo, rateLimiter, credRepo, upstreamRepo, tenantRepo, geolocator, cache, notifyClient)
+	proxyService  := proxysvc.NewService(cfg, tsaClient, quotaRepo, usageRepo, rateLimiter, credRepo, upstreamRepo, tenantRepo, alertEmailRepo, geolocator, cache, notifyClient)
 
 	// ── Middlewares ───────────────────────────────────────────────
 	authMW      := middleware.NewAuthMiddleware(credRepo, cache, failedRepo)
@@ -130,6 +131,7 @@ func main() {
 	adminAuditH   := adminhandler.NewAuditHandler(auditRepo, adminUserRepo)
 	adminConfigH  := adminhandler.NewConfigHandler(upstreamRepo, quotaRepo, cache, auditRepo, cfg.Upstream.AllowedHosts)
 	adminUsersH   := adminhandler.NewUsersHandler(adminUserRepo, tenantRepo, authService)
+	adminAlertsH  := adminhandler.NewAlertsHandler(alertEmailRepo, tenantService, notifyClient)
 
 	// ── Router ────────────────────────────────────────────────────
 	router := server.NewRouter(&server.Deps{
@@ -153,6 +155,7 @@ func main() {
 		TSPAuthMW:        tspAuthMW,
 		AdminBasicAuth:   adminBasicAuthH,
 		AdminNoAuth:      adminNoAuthH,
+		AdminAlerts:      adminAlertsH,
 	})
 
 	// ── HTTP Server ───────────────────────────────────────────────

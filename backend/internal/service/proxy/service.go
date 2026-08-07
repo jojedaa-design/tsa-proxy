@@ -42,17 +42,18 @@ type Result struct {
 
 // Service orquesta el flujo completo de un timestamp request.
 type Service struct {
-	cfg          *config.Config
-	upstream     *upstream.Client
-	quotaRepo    *postgres.QuotaRepository
-	usageRepo    *postgres.UsageRepository
-	rateLimiter  *rediscache.RateLimiter
-	credRepo     *postgres.CredentialRepository
-	upstreamRepo *postgres.UpstreamRepository
-	tenantRepo   *postgres.TenantRepository
-	geolocator   *geoloc.Locator
-	cache        *rediscache.Cache
-	notifier     *notifysvc.Client
+	cfg            *config.Config
+	upstream       *upstream.Client
+	quotaRepo      *postgres.QuotaRepository
+	usageRepo      *postgres.UsageRepository
+	rateLimiter    *rediscache.RateLimiter
+	credRepo       *postgres.CredentialRepository
+	upstreamRepo   *postgres.UpstreamRepository
+	tenantRepo     *postgres.TenantRepository
+	alertEmailRepo *postgres.AlertEmailRepository
+	geolocator     *geoloc.Locator
+	cache          *rediscache.Cache
+	notifier       *notifysvc.Client
 }
 
 func NewService(
@@ -64,22 +65,24 @@ func NewService(
 	credRepo *postgres.CredentialRepository,
 	upstreamRepo *postgres.UpstreamRepository,
 	tenantRepo *postgres.TenantRepository,
+	alertEmailRepo *postgres.AlertEmailRepository,
 	geolocator *geoloc.Locator,
 	cache *rediscache.Cache,
 	notifier *notifysvc.Client,
 ) *Service {
 	return &Service{
-		cfg:          cfg,
-		upstream:     upstreamClient,
-		quotaRepo:    quotaRepo,
-		usageRepo:    usageRepo,
-		rateLimiter:  rl,
-		credRepo:     credRepo,
-		upstreamRepo: upstreamRepo,
-		tenantRepo:   tenantRepo,
-		geolocator:   geolocator,
-		cache:        cache,
-		notifier:     notifier,
+		cfg:            cfg,
+		upstream:       upstreamClient,
+		quotaRepo:      quotaRepo,
+		usageRepo:      usageRepo,
+		rateLimiter:    rl,
+		credRepo:       credRepo,
+		upstreamRepo:   upstreamRepo,
+		tenantRepo:     tenantRepo,
+		alertEmailRepo: alertEmailRepo,
+		geolocator:     geolocator,
+		cache:          cache,
+		notifier:       notifier,
 	}
 }
 
@@ -424,8 +427,21 @@ func (s *Service) checkBundleAlerts(ctx context.Context, tenantID uuid.UUID) {
 
 	// Obtener contact_email del tenant
 	tenant, err := s.tenantRepo.GetByID(ctx, tenantID)
-	if err != nil || tenant == nil || tenant.ContactEmail == nil || *tenant.ContactEmail == "" {
-		return // sin correo configurado, nada que hacer
+	if err != nil || tenant == nil {
+		return
+	}
+
+	// Construir lista de destinatarios: contact_email + alert_emails adicionales
+	recipients := make([]string, 0, 4)
+	if tenant.ContactEmail != nil && *tenant.ContactEmail != "" {
+		recipients = append(recipients, *tenant.ContactEmail)
+	}
+	if s.alertEmailRepo != nil {
+		extras, _ := s.alertEmailRepo.ListEmails(ctx, tenantID)
+		recipients = append(recipients, extras...)
+	}
+	if len(recipients) == 0 {
+		return // sin destinatarios configurados
 	}
 
 	// Obtener bolsas con consumo FIFO y umbral configurado
@@ -456,7 +472,7 @@ func (s *Service) checkBundleAlerts(ctx context.Context, tenantID uuid.UUID) {
 			bundleNote = *b.Note
 		}
 		msgID, err := s.notifier.SendBundleAlert(ctx, notifysvc.BundleAlertParams{
-			To:               *tenant.ContactEmail,
+			To:               recipients,
 			TenantName:       tenant.Name,
 			BundleNote:       bundleNote,
 			Consumed:         b.Consumed,
@@ -482,7 +498,7 @@ func (s *Service) checkBundleAlerts(ctx context.Context, tenantID uuid.UUID) {
 			Str("bundle_id", b.ID.String()).
 			Int("threshold_pct", threshold).
 			Str("brevo_message_id", msgID).
-			Str("to", *tenant.ContactEmail).
+			Strs("to", recipients).
 			Msg("bundle alert email sent")
 	}
 }

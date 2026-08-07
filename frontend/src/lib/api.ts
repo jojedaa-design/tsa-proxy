@@ -54,6 +54,14 @@ export interface QuotaBundle {
   alert_threshold_percent?: number;
 }
 
+export interface AlertEmail {
+  id: string;
+  tenant_id: string;
+  email: string;
+  label?: string;
+  created_at: string;
+}
+
 export interface APICredential {
   id: string;
   tenant_id: string;
@@ -512,6 +520,31 @@ export const api = {
 
   async listBundles(tenantId: string) {
     return apiFetch<QuotaBundle[]>(`/api/admin/v1/tenants/${tenantId}/bundles`);
+  },
+
+  // Alert emails
+  async listAlertEmails(tenantId: string) {
+    return apiFetch<AlertEmail[]>(`/api/admin/v1/tenants/${tenantId}/alert-emails`);
+  },
+
+  async addAlertEmail(tenantId: string, data: { email: string; label?: string }) {
+    return apiFetch<AlertEmail>(`/api/admin/v1/tenants/${tenantId}/alert-emails`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async deleteAlertEmail(tenantId: string, emailId: string) {
+    return apiFetch<void>(`/api/admin/v1/tenants/${tenantId}/alert-emails/${emailId}`, {
+      method: "DELETE",
+    });
+  },
+
+  async testAlertEmails(tenantId: string) {
+    return apiFetch<{ sent_to: string[]; message: string }>(
+      `/api/admin/v1/tenants/${tenantId}/alert-emails/test`,
+      { method: "POST" }
+    );
   },
 
   // Reports

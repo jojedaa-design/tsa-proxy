@@ -45,6 +45,46 @@ var failureMeta = map[string]struct{ label, category string }{
 	"malformed_request":  {"Solicitud malformada", "request"},
 }
 
+// DailyUsage — GET /api/admin/v1/reports/daily-usage?tenant_id=&from=&to=
+func (h *ReportsHandler) DailyUsage(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	tidStr := q.Get("tenant_id")
+	if tidStr == "" {
+		apierr.WriteValidationError(w, r, map[string]string{"tenant_id": "required"})
+		return
+	}
+	tenantID, err := uuid.Parse(tidStr)
+	if err != nil {
+		apierr.WriteValidationError(w, r, map[string]string{"tenant_id": "invalid UUID"})
+		return
+	}
+
+	now := time.Now()
+	from := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	to := now
+
+	if s := q.Get("from"); s != "" {
+		if t, err := time.Parse("2006-01-02", s); err == nil {
+			from = t
+		}
+	}
+	if s := q.Get("to"); s != "" {
+		if t, err := time.Parse("2006-01-02", s); err == nil {
+			to = t.Add(24*time.Hour - time.Second)
+		}
+	}
+
+	data, err := h.usageRepo.GetDailyConsumption(r.Context(), tenantID, from, to)
+	if err != nil {
+		apierr.WriteError(w, r, apierr.ErrInternal)
+		return
+	}
+	if data == nil {
+		data = []*postgres.DailyUsage{}
+	}
+	apierr.WriteJSON(w, http.StatusOK, data)
+}
+
 // Usage — GET /api/admin/v1/reports/usage
 func (h *ReportsHandler) Usage(w http.ResponseWriter, r *http.Request) {
 	f, err := parseUsageFilter(r)

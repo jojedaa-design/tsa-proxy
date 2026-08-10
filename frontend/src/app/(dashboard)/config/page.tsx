@@ -582,7 +582,7 @@ function UsersSection() {
                   <p className="text-sm text-gray-600 mt-1">{u.email}</p>
                   {u.role === "viewer" && (
                     <p className="text-xs text-gray-400 mt-1">
-                      Acceso a: {u.tenant_scope.length === 0 ? "todos los clientes" : `${u.tenant_scope.length} cliente(s)`}
+                      Cliente: {u.tenant_name ?? (u.tenant_scope.length === 0 ? "todos los clientes" : u.tenant_scope[0])}
                     </p>
                   )}
                 </div>

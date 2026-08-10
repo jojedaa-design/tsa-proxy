@@ -227,6 +227,16 @@ func (r *QuotaRepository) RecordBundleNotification(ctx context.Context, bundleID
 	return tag.RowsAffected() == 1, nil
 }
 
+// UpdateBundleAlertThreshold actualiza el umbral de alerta de una bolsa existente.
+// Pasa nil para desactivar la alerta.
+func (r *QuotaRepository) UpdateBundleAlertThreshold(ctx context.Context, bundleID uuid.UUID, thresholdPercent *int) error {
+	_, err := r.pool.Exec(ctx,
+		`UPDATE quota_bundles SET alert_threshold_percent=$1 WHERE id=$2`,
+		thresholdPercent, bundleID,
+	)
+	return err
+}
+
 func (r *QuotaRepository) UpsertMonthlyAggregate(ctx context.Context, tenantID uuid.UUID, year, month int, status model.UsageStatus, latencyMs int) error {
 	var successInt, failInt, rejectedInt int
 	switch status {

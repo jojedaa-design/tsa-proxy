@@ -37,6 +37,7 @@ type userResponse struct {
 	TOTPEnabled bool       `json:"totp_enabled"`
 	Role        string     `json:"role"`
 	TenantScope []string   `json:"tenant_scope"` // vacío = todos los tenants
+	TenantName  *string    `json:"tenant_name,omitempty"` // solo para rol viewer
 	CreatedAt   string     `json:"created_at"`
 	LastLoginAt *string    `json:"last_login_at,omitempty"`
 }
@@ -56,6 +57,15 @@ func (h *UsersHandler) toResponse(r *http.Request, u *model.AdminUser) userRespo
 		s := u.LastLoginAt.Format("2006-01-02T15:04:05Z07:00")
 		lastLogin = &s
 	}
+
+	// Para usuarios viewer con un tenant asignado, resolver el nombre del cliente.
+	var tenantName *string
+	if role == "viewer" && len(scope) == 1 && h.tenantRepo != nil {
+		if t, err := h.tenantRepo.GetByID(r.Context(), scope[0]); err == nil && t != nil {
+			tenantName = &t.Name
+		}
+	}
+
 	return userResponse{
 		ID:          u.ID,
 		Username:    u.Username,
@@ -64,6 +74,7 @@ func (h *UsersHandler) toResponse(r *http.Request, u *model.AdminUser) userRespo
 		TOTPEnabled: u.TOTPEnabled,
 		Role:        role,
 		TenantScope: scopeStrs,
+		TenantName:  tenantName,
 		CreatedAt:   u.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		LastLoginAt: lastLogin,
 	}

@@ -389,6 +389,44 @@ func (r *UsageRepository) GetUpstreamFailureStats(ctx context.Context, tenantID 
 	return result, rows.Err()
 }
 
+// DailyUsage representa el consumo de sellos agrupado por día.
+type DailyUsage struct {
+	Date        string `json:"date"` // YYYY-MM-DD
+	Total       int    `json:"total_requests"`
+	Successful  int    `json:"successful_requests"`
+	Failed      int    `json:"failed_requests"`
+	Rejected    int    `json:"rejected_requests"`
+}
+
+// GetDailyConsumption retorna el consumo diario de sellos para un tenant en un rango de fechas.
+func (r *UsageRepository) GetDailyConsumption(ctx context.Context, tenantID uuid.UUID, from, to time.Time) ([]*DailyUsage, error) {
+	rows, err := r.pool.Query(ctx, `
+		SELECT
+			DATE(occurred_at)::text AS date,
+			COUNT(*)                                              AS total_requests,
+			COUNT(*) FILTER (WHERE status = 'success')           AS successful_requests,
+			COUNT(*) FILTER (WHERE status = 'error')             AS failed_requests,
+			COUNT(*) FILTER (WHERE status = 'rejected')          AS rejected_requests
+		FROM usage_events
+		WHERE tenant_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
+		GROUP BY DATE(occurred_at)
+		ORDER BY date ASC
+	`, tenantID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	result := make([]*DailyUsage, 0)
+	for rows.Next() {
+		d := &DailyUsage{}
+		if err := rows.Scan(&d.Date, &d.Total, &d.Successful, &d.Failed, &d.Rejected); err != nil {
+			return nil, err
+		}
+		result = append(result, d)
+	}
+	return result, rows.Err()
+}
+
 // GetDashboardSummary retorna el resumen para el dashboard.
 type DashboardSummary struct {
 	ActiveTenants   int     `json:"active_tenants"`

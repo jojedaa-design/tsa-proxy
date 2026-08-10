@@ -216,8 +216,17 @@ export interface PlatformUser {
   totp_enabled: boolean;
   role: string;
   tenant_scope: string[]; // vacío = todos los tenants
+  tenant_name?: string;   // solo para rol viewer con un tenant asignado
   created_at: string;
   last_login_at?: string;
+}
+
+export interface DailyUsage {
+  date: string; // YYYY-MM-DD
+  total_requests: number;
+  successful_requests: number;
+  failed_requests: number;
+  rejected_requests: number;
 }
 
 export interface Role {
@@ -604,8 +613,20 @@ export const api = {
   },
 
   async getBundleReport(tenantId: string) {
-    return apiFetch<Array<{ id: string; amount: number; consumed: number; note?: string; contracted_at: string }>>(
+    return apiFetch<Array<{ id: string; amount: number; consumed: number; note?: string; contracted_at: string; alert_threshold_percent?: number }>>(
       `/api/admin/v1/reports/bundles?tenant_id=${encodeURIComponent(tenantId)}`
+    );
+  },
+
+  async getDailyUsage(tenantId: string, from: string, to: string) {
+    const q = new URLSearchParams({ tenant_id: tenantId, from, to });
+    return apiFetch<DailyUsage[]>(`/api/admin/v1/reports/daily-usage?${q}`);
+  },
+
+  async updateBundleAlert(tenantId: string, bundleId: string, alertThresholdPercent: number | null) {
+    return apiFetch<{ bundle_id: string; alert_threshold_percent: number | null }>(
+      `/api/admin/v1/tenants/${tenantId}/bundles/${bundleId}`,
+      { method: "PATCH", body: JSON.stringify({ alert_threshold_percent: alertThresholdPercent }) }
     );
   },
 

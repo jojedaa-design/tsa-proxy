@@ -837,10 +837,14 @@ function QuotaForm({ tenantId, initialQuota }: {
   const [alertThreshold, setAlertThreshold] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [saved, setSaved] = useState(false);
+  // edición inline de umbral de alerta: bundleId → valor en edición
+  const [editingAlert, setEditingAlert] = useState<Record<string, string>>({});
 
   useEffect(() => {
     api.listBundles(tenantId).then(setBundles);
   }, [tenantId]);
+
+  const refreshBundles = () => api.listBundles(tenantId).then(setBundles);
 
   const updateBurst = useMutation({
     mutationFn: () => api.updateQuota(tenantId, { burst_per_minute: parseInt(burst) }),
@@ -859,11 +863,18 @@ function QuotaForm({ tenantId, initialQuota }: {
     }),
     onSuccess: () => {
       setShowModal(false);
-      setAmount("");
-      setNote("");
-      setAlertThreshold("");
-      api.listBundles(tenantId).then(setBundles);
+      setAmount(""); setNote(""); setAlertThreshold("");
+      refreshBundles();
       qc.invalidateQueries({ queryKey: ["quota", tenantId] });
+    },
+  });
+
+  const updateAlertMut = useMutation({
+    mutationFn: ({ bundleId, value }: { bundleId: string; value: string }) =>
+      api.updateBundleAlert(tenantId, bundleId, value ? parseInt(value) : null),
+    onSuccess: (_, { bundleId }) => {
+      setEditingAlert((prev) => { const n = { ...prev }; delete n[bundleId]; return n; });
+      refreshBundles();
     },
   });
 
@@ -874,7 +885,7 @@ function QuotaForm({ tenantId, initialQuota }: {
       <div className="card p-6 space-y-4">
         <h2 className="text-base font-semibold text-gray-900">Bolsa de sellos</h2>
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <p className="text-2xl font-bold text-blue-900">{contracted}</p>
+          <p className="text-2xl font-bold text-blue-900">{contracted.toLocaleString()}</p>
           <p className="text-sm text-blue-700">sellos contratados en total</p>
         </div>
         <button onClick={() => setShowModal(true)} className="btn-primary">
@@ -888,47 +899,27 @@ function QuotaForm({ tenantId, initialQuota }: {
             <h3 className="text-lg font-semibold">Nueva bolsa</h3>
             <div>
               <label className="label">Cantidad de sellos *</label>
-              <input
-                type="number"
-                placeholder="1000"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                className="input w-full"
-                min="1"
-              />
+              <input type="number" placeholder="1000" value={amount}
+                onChange={(e) => setAmount(e.target.value)} className="input w-full" min="1" />
             </div>
             <div>
               <label className="label">Referencia</label>
-              <input
-                type="text"
-                placeholder="Nº factura, descripción…"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                className="input w-full"
-              />
+              <input type="text" placeholder="Nº factura, descripción…" value={note}
+                onChange={(e) => setNote(e.target.value)} className="input w-full" />
             </div>
             <div>
               <label className="label">Alerta de consumo (%)</label>
-              <input
-                type="number"
-                placeholder="80"
-                value={alertThreshold}
+              <input type="number" placeholder="80" value={alertThreshold}
                 onChange={(e) => setAlertThreshold(e.target.value)}
-                className="input w-full"
-                min="1"
-                max="99"
-              />
+                className="input w-full" min="1" max="99" />
               <p className="text-xs text-gray-400 mt-1">
-                Envía un correo al contact_email del cliente cuando se consuma este % de la bolsa (opcional)
+                Envía correo cuando se consuma este % de la bolsa (opcional)
               </p>
             </div>
             <div className="flex gap-3 pt-1">
               <button onClick={() => setShowModal(false)} className="btn flex-1">Cancelar</button>
-              <button
-                onClick={() => addBundle.mutate()}
-                disabled={!amount || addBundle.isPending}
-                className="btn-primary flex-1"
-              >
+              <button onClick={() => addBundle.mutate()} disabled={!amount || addBundle.isPending}
+                className="btn-primary flex-1">
                 {addBundle.isPending ? "Guardando..." : "Guardar"}
               </button>
             </div>
@@ -946,22 +937,54 @@ function QuotaForm({ tenantId, initialQuota }: {
                   <th className="text-left py-3 pr-4">Fecha</th>
                   <th className="text-right py-3 px-4">Cantidad</th>
                   <th className="text-left py-3 pl-4">Referencia</th>
-                  <th className="text-center py-3 px-4">Alerta</th>
+                  <th className="text-center py-3 px-4">Alerta (%)</th>
                 </tr>
               </thead>
               <tbody>
-                {bundles.map((b) => (
-                  <tr key={b.id} className="border-b">
-                    <td className="py-3 pr-4">{new Date(b.contracted_at).toLocaleDateString()}</td>
-                    <td className="text-right font-medium py-3 px-4">{b.amount}</td>
-                    <td className="text-gray-600 py-3 pl-4">{b.note || "—"}</td>
-                    <td className="text-center py-3 px-4">
-                      {b.alert_threshold_percent
-                        ? <span className="badge badge-yellow">{b.alert_threshold_percent}%</span>
-                        : <span className="text-gray-300">—</span>}
-                    </td>
-                  </tr>
-                ))}
+                {bundles.map((b) => {
+                  const isEditing = b.id in editingAlert;
+                  const editVal = editingAlert[b.id] ?? "";
+                  return (
+                    <tr key={b.id} className="border-b hover:bg-gray-50">
+                      <td className="py-3 pr-4">{new Date(b.contracted_at).toLocaleDateString("es-AR")}</td>
+                      <td className="text-right font-medium py-3 px-4">{b.amount.toLocaleString()}</td>
+                      <td className="text-gray-600 py-3 pl-4">{b.note || "—"}</td>
+                      <td className="py-2 px-4">
+                        {isEditing ? (
+                          <div className="flex items-center gap-1 justify-center">
+                            <input
+                              type="number" min="1" max="99"
+                              value={editVal}
+                              onChange={(e) => setEditingAlert((p) => ({ ...p, [b.id]: e.target.value }))}
+                              className="input w-16 py-1 text-center text-sm"
+                              placeholder="1-99"
+                            />
+                            <button
+                              onClick={() => updateAlertMut.mutate({ bundleId: b.id, value: editVal })}
+                              disabled={updateAlertMut.isPending}
+                              className="btn-primary px-2 py-1 text-xs"
+                            >✓</button>
+                            <button
+                              onClick={() => setEditingAlert((p) => { const n = { ...p }; delete n[b.id]; return n; })}
+                              className="btn px-2 py-1 text-xs text-gray-500"
+                            >✕</button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 justify-center">
+                            {b.alert_threshold_percent
+                              ? <span className="badge badge-yellow">{b.alert_threshold_percent}%</span>
+                              : <span className="text-gray-300 text-xs">—</span>}
+                            <button
+                              onClick={() => setEditingAlert((p) => ({ ...p, [b.id]: String(b.alert_threshold_percent ?? "") }))}
+                              title="Editar umbral"
+                              className="text-gray-400 hover:text-primary-600 text-xs"
+                            >✎</button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

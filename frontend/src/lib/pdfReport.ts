@@ -1,6 +1,6 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import type { IPUsage, UserAgentStat, FailureBreakdownResponse } from "./api";
+import type { IPUsage, UserAgentStat, FailureBreakdownResponse, DailyUsage } from "./api";
 
 // ── Colores de marca (BIGDAVI) ───────────────────────────────
 const NAVY: [number, number, number] = [11, 31, 58];
@@ -28,6 +28,7 @@ export interface ConsumptionReportInput {
   to: string;
   summary?: Record<string, unknown>;
   bundles?: BundleItem[] | null;
+  dailyUsage?: DailyUsage[];
   ips?: IPUsage[];
   agents?: UserAgentStat[];
   failures?: FailureBreakdownResponse;
@@ -212,6 +213,47 @@ export async function generateConsumptionReportPDF(input: ConsumptionReportInput
       doc.setTextColor(...GRAY_LIGHT);
       doc.setFont("helvetica", "italic");
       doc.text(`+${input.bundles.length - MAX_ROWS} bolsa(s) adicional(es) — ver detalle completo en el panel.`, margin, y);
+    }
+    y += 8;
+  }
+
+  // ── Consumo por día (máx 30 filas para no romper el PDF) ───────
+  if (input.dailyUsage && input.dailyUsage.length > 0) {
+    const MAX_DAILY = 30;
+    const shown = input.dailyUsage.slice(-MAX_DAILY); // últimos N días del período
+
+    doc.setTextColor(...NAVY);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.text("Consumo de sellos por día", margin, y);
+    y += 3;
+
+    autoTable(doc, {
+      startY: y,
+      margin: { left: margin, right: margin },
+      head: [["Fecha", "Total", "Exitosos", "Errores", "Rechazados", "% Éxito"]],
+      body: shown.map((d) => {
+        const pct = d.total_requests > 0 ? Math.round(d.successful_requests * 100 / d.total_requests) : 0;
+        return [
+          d.date,
+          d.total_requests.toLocaleString("es-AR"),
+          d.successful_requests.toLocaleString("es-AR"),
+          d.failed_requests.toLocaleString("es-AR"),
+          d.rejected_requests.toLocaleString("es-AR"),
+          `${pct}%`,
+        ];
+      }),
+      theme: "striped",
+      headStyles: { fillColor: BLUE, textColor: WHITE, fontSize: 7, halign: "center" },
+      bodyStyles: { fontSize: 7, textColor: GRAY_TEXT, halign: "center" },
+    });
+    y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
+    if (input.dailyUsage.length > MAX_DAILY) {
+      y += 4;
+      doc.setFontSize(7.5);
+      doc.setTextColor(...GRAY_LIGHT);
+      doc.setFont("helvetica", "italic");
+      doc.text(`Solo se muestran los últimos ${MAX_DAILY} días. Ver detalle completo en el panel.`, margin, y);
     }
     y += 8;
   }

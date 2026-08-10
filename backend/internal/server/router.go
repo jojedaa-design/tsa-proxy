@@ -160,6 +160,7 @@ func NewRouter(d *Deps) http.Handler {
 						r.Put("/quota", d.AdminQuotas.Update)
 						r.Post("/bundles", d.AdminQuotas.AddBundle)
 						r.Get("/bundles", d.AdminQuotas.ListBundles)
+						r.Patch("/bundles/{bundleId}", d.AdminQuotas.UpdateBundleAlert)
 
 						r.Get("/basic-auth",  d.AdminBasicAuth.ListByTenant)
 						r.Post("/basic-auth", d.AdminBasicAuth.Create)
@@ -235,6 +236,7 @@ func NewRouter(d *Deps) http.Handler {
 				r.Get("/top-countries",   d.AdminReports.TopCountries)
 				r.Get("/failures",        d.AdminReports.FailureBreakdown)
 				r.Get("/bundles", d.AdminQuotas.GetBundleReport)
+				r.Get("/daily-usage", d.AdminReports.DailyUsage)
 				r.Post("/next-number", d.AdminReports.NextReportNumber)
 			})
 

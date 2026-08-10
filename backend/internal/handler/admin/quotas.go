@@ -186,6 +186,38 @@ func (h *QuotasHandler) AddBundle(w http.ResponseWriter, r *http.Request) {
 	apierr.WriteJSON(w, http.StatusCreated, bundle)
 }
 
+// UpdateBundleAlert — PATCH /api/admin/v1/tenants/:id/bundles/:bundleId
+func (h *QuotasHandler) UpdateBundleAlert(w http.ResponseWriter, r *http.Request) {
+	bundleID, err := uuid.Parse(chi.URLParam(r, "bundleId"))
+	if err != nil {
+		apierr.WriteError(w, r, apierr.ErrBadRequest)
+		return
+	}
+
+	var req struct {
+		AlertThresholdPercent *int `json:"alert_threshold_percent"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		apierr.WriteError(w, r, apierr.ErrBadRequest)
+		return
+	}
+	if req.AlertThresholdPercent != nil && (*req.AlertThresholdPercent < 1 || *req.AlertThresholdPercent > 99) {
+		apierr.WriteValidationError(w, r, map[string]string{
+			"alert_threshold_percent": "must be between 1 and 99",
+		})
+		return
+	}
+
+	if err := h.quotaRepo.UpdateBundleAlertThreshold(r.Context(), bundleID, req.AlertThresholdPercent); err != nil {
+		apierr.WriteError(w, r, apierr.ErrInternal)
+		return
+	}
+	apierr.WriteJSON(w, http.StatusOK, map[string]interface{}{
+		"bundle_id":               bundleID,
+		"alert_threshold_percent": req.AlertThresholdPercent,
+	})
+}
+
 // ListBundles — GET /api/admin/v1/tenants/:id/bundles (histórico)
 func (h *QuotasHandler) ListBundles(w http.ResponseWriter, r *http.Request) {
 	tenantID, err := uuid.Parse(chi.URLParam(r, "id"))

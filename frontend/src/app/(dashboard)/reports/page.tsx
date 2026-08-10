@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { api, type FailureDetail } from "@/lib/api";
+import { api, type FailureDetail, type DailyUsage } from "@/lib/api";
 import { generateConsumptionReportPDF } from "@/lib/pdfReport";
 
 // ── Helpers de categoría ──────────────────────────────────────
@@ -109,6 +109,15 @@ export default function ReportsPage() {
     refetchInterval: 4000,
   });
 
+  const { data: dailyData, isLoading: dailyLoading } = useQuery({
+    queryKey: ["daily-usage", tenantId, from, to],
+    queryFn: () => tenantId ? api.getDailyUsage(tenantId, from, to) : Promise.resolve(null),
+    enabled: !!tenantId,
+    refetchInterval: 4000,
+  });
+
+  const [consumptionView, setConsumptionView] = useState<"day" | "month" | "year">("day");
+
   async function exportPDF() {
     if (exportingPDF) return;
     setExportingPDF(true);
@@ -131,6 +140,7 @@ export default function ReportsPage() {
         to,
         summary: data?.summary as Record<string, unknown> | undefined,
         bundles: bundleData,
+        dailyUsage: dailyData ?? undefined,
         ips: ipsData?.data,
         agents: agentsData?.data,
         failures: failuresData,
@@ -205,6 +215,7 @@ export default function ReportsPage() {
                     <th className="text-right py-2 px-4">Cantidad</th>
                     <th className="text-right py-2 px-4">Consumido</th>
                     <th className="text-right py-2 px-4">Disponible</th>
+                    <th className="text-center py-2 px-4">Alerta</th>
                     <th className="text-left py-2 pl-4">Referencia</th>
                   </tr>
                 </thead>
@@ -225,6 +236,11 @@ export default function ReportsPage() {
                           </div>
                         </td>
                         <td className="text-right py-3 px-4 font-medium">{available.toLocaleString()}</td>
+                        <td className="text-center py-3 px-4">
+                          {bundle.alert_threshold_percent
+                            ? <span className="badge badge-yellow">{bundle.alert_threshold_percent}%</span>
+                            : <span className="text-gray-300 text-xs">—</span>}
+                        </td>
                         <td className="text-gray-600 py-3 pl-4">{bundle.note || "—"}</td>
                       </tr>
                     );
@@ -232,6 +248,38 @@ export default function ReportsPage() {
                 </tbody>
               </table>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* Consumo de sellos por período */}
+      {tenantId && (
+        <div className="card p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">Consumo de sellos por período</h2>
+            <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+              {(["day", "month", "year"] as const).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setConsumptionView(v)}
+                  className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                    consumptionView === v
+                      ? "bg-white text-primary-700 font-medium shadow-sm"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  {v === "day" ? "Día" : v === "month" ? "Mes" : "Año"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {dailyLoading ? (
+            <p className="text-gray-500 text-sm">Cargando...</p>
+          ) : !dailyData || dailyData.length === 0 ? (
+            <p className="text-gray-500 text-sm">Sin datos para el período seleccionado.</p>
+          ) : (
+            <ConsumptionTable data={dailyData} view={consumptionView} />
           )}
         </div>
       )}
@@ -444,6 +492,100 @@ function FailureList({ items, total }: { items: FailureDetail[]; total: number }
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ── Tabla de consumo por período ──────────────────────────────
+
+type MonthRow  = { key: string; label: string; total: number; successful: number; failed: number; rejected: number };
+type YearRow   = MonthRow;
+
+function ConsumptionTable({ data, view }: { data: DailyUsage[]; view: "day" | "month" | "year" }) {
+  // Agregar datos según la vista seleccionada
+  const rows: MonthRow[] = (() => {
+    if (view === "day") {
+      return data.map((d) => ({
+        key:        d.date,
+        label:      new Date(d.date + "T00:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" }),
+        total:      d.total_requests,
+        successful: d.successful_requests,
+        failed:     d.failed_requests,
+        rejected:   d.rejected_requests,
+      }));
+    }
+    const map = new Map<string, MonthRow>();
+    data.forEach((d) => {
+      const [y, m] = d.date.split("-");
+      const key   = view === "month" ? `${y}-${m}` : y;
+      const label = view === "month"
+        ? new Date(`${y}-${m}-01T00:00:00`).toLocaleDateString("es-AR", { month: "long", year: "numeric" })
+        : y;
+      const existing = map.get(key) ?? { key, label, total: 0, successful: 0, failed: 0, rejected: 0 };
+      existing.total      += d.total_requests;
+      existing.successful += d.successful_requests;
+      existing.failed     += d.failed_requests;
+      existing.rejected   += d.rejected_requests;
+      map.set(key, existing);
+    });
+    return Array.from(map.values());
+  })();
+
+  const grandTotal = rows.reduce((s, r) => s + r.total, 0);
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead className="border-b bg-gray-50">
+          <tr>
+            <th className="text-left py-2 px-3 font-medium text-gray-600">
+              {view === "day" ? "Fecha" : view === "month" ? "Mes" : "Año"}
+            </th>
+            <th className="text-right py-2 px-3 font-medium text-gray-600">Total</th>
+            <th className="text-right py-2 px-3 font-medium text-gray-600">Exitosos</th>
+            <th className="text-right py-2 px-3 font-medium text-gray-600">Errores</th>
+            <th className="text-right py-2 px-3 font-medium text-gray-600">Rechazados</th>
+            <th className="text-right py-2 px-3 font-medium text-gray-600">% Éxito</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100">
+          {rows.map((row) => {
+            const pct = row.total > 0 ? Math.round(row.successful * 100 / row.total) : 0;
+            return (
+              <tr key={row.key} className="hover:bg-gray-50">
+                <td className="py-2 px-3 text-gray-800">{row.label}</td>
+                <td className="text-right py-2 px-3 font-semibold">{row.total.toLocaleString("es-AR")}</td>
+                <td className="text-right py-2 px-3 text-green-700">{row.successful.toLocaleString("es-AR")}</td>
+                <td className="text-right py-2 px-3 text-red-600">{row.failed.toLocaleString("es-AR")}</td>
+                <td className="text-right py-2 px-3 text-orange-600">{row.rejected.toLocaleString("es-AR")}</td>
+                <td className="text-right py-2 px-3">
+                  <span className={`font-medium ${pct >= 95 ? "text-green-700" : pct >= 80 ? "text-yellow-600" : "text-red-600"}`}>
+                    {pct}%
+                  </span>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+        <tfoot className="border-t-2 border-gray-200 bg-gray-50">
+          <tr>
+            <td className="py-2 px-3 font-semibold text-gray-700">Total período</td>
+            <td className="text-right py-2 px-3 font-bold">{grandTotal.toLocaleString("es-AR")}</td>
+            <td className="text-right py-2 px-3 font-semibold text-green-700">
+              {rows.reduce((s, r) => s + r.successful, 0).toLocaleString("es-AR")}
+            </td>
+            <td className="text-right py-2 px-3 font-semibold text-red-600">
+              {rows.reduce((s, r) => s + r.failed, 0).toLocaleString("es-AR")}
+            </td>
+            <td className="text-right py-2 px-3 font-semibold text-orange-600">
+              {rows.reduce((s, r) => s + r.rejected, 0).toLocaleString("es-AR")}
+            </td>
+            <td className="text-right py-2 px-3 font-bold">
+              {grandTotal > 0 ? Math.round(rows.reduce((s, r) => s + r.successful, 0) * 100 / grandTotal) : 0}%
+            </td>
+          </tr>
+        </tfoot>
+      </table>
     </div>
   );
 }

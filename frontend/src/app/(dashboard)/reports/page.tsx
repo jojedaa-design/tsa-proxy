@@ -110,26 +110,28 @@ export default function ReportsPage() {
   });
 
   const [consumptionView, setConsumptionView] = useState<"day" | "month" | "year">("day");
-  const [consumptionMonth, setConsumptionMonth] = useState(() => {
+  const [selectedDay, setSelectedDay] = useState(() => new Date().toISOString().split("T")[0]);
+  const [selectedMonth, setSelectedMonth] = useState(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   });
-  const [consumptionYear, setConsumptionYear] = useState(() => String(new Date().getFullYear()));
+  const [selectedYear, setSelectedYear] = useState(() => String(new Date().getFullYear()));
 
-  // Rango de fechas propio de la sección de consumo, independiente del filtro global
-  const consumptionFrom = (() => {
-    if (consumptionView === "day") return `${consumptionMonth}-01`;
-    if (consumptionView === "month") return `${consumptionYear}-01-01`;
-    return "2019-01-01"; // vista año: toda la historia del tenant
-  })();
-  const consumptionTo = (() => {
-    if (consumptionView === "day") {
-      const [y, m] = consumptionMonth.split("-").map(Number);
-      return `${consumptionMonth}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
-    }
-    if (consumptionView === "month") return `${consumptionYear}-12-31`;
-    return new Date().toISOString().split("T")[0];
-  })();
+  // Rango exacto según la vista activa
+  const consumptionFrom = consumptionView === "day"
+    ? selectedDay
+    : consumptionView === "month"
+    ? `${selectedMonth}-01`
+    : `${selectedYear}-01-01`;
+
+  const consumptionTo = consumptionView === "day"
+    ? selectedDay
+    : consumptionView === "month"
+    ? (() => {
+        const [y, m] = selectedMonth.split("-").map(Number);
+        return `${selectedMonth}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
+      })()
+    : `${selectedYear}-12-31`;
 
   const { data: dailyData, isLoading: dailyLoading } = useQuery({
     queryKey: ["daily-usage", tenantId, consumptionFrom, consumptionTo],
@@ -278,70 +280,80 @@ export default function ReportsPage() {
       {/* Consumo de sellos por período */}
       {tenantId && (
         <div className="card p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
             <h2 className="text-lg font-semibold text-gray-900">Consumo de sellos por período</h2>
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* Selector de mes (vista Día) */}
-              {consumptionView === "day" && (
-                <div className="flex items-center gap-1.5">
-                  <label className="text-xs text-gray-500 whitespace-nowrap">Mes:</label>
-                  <input
-                    type="month"
-                    value={consumptionMonth}
-                    onChange={(e) => setConsumptionMonth(e.target.value)}
-                    className="input py-1 text-sm"
-                  />
-                </div>
-              )}
-              {/* Selector de año (vista Mes) */}
-              {consumptionView === "month" && (
-                <div className="flex items-center gap-1.5">
-                  <label className="text-xs text-gray-500 whitespace-nowrap">Año:</label>
-                  <select
-                    value={consumptionYear}
-                    onChange={(e) => setConsumptionYear(e.target.value)}
-                    className="input py-1 text-sm"
-                  >
-                    {yearOptions.map((y) => (
-                      <option key={y} value={y}>{y}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              {/* Pestañas de vista */}
-              <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-                {(["day", "month", "year"] as const).map((v) => (
-                  <button
-                    key={v}
-                    onClick={() => setConsumptionView(v)}
-                    className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                      consumptionView === v
-                        ? "bg-white text-primary-700 font-medium shadow-sm"
-                        : "text-gray-500 hover:text-gray-700"
-                    }`}
-                  >
-                    {v === "day" ? "Día" : v === "month" ? "Mes" : "Año"}
-                  </button>
-                ))}
-              </div>
+            {/* Pestañas de vista */}
+            <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+              {(["day", "month", "year"] as const).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setConsumptionView(v)}
+                  className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                    consumptionView === v
+                      ? "bg-white text-primary-700 font-medium shadow-sm"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  {v === "day" ? "Día" : v === "month" ? "Mes" : "Año"}
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* Subtítulo descriptivo del rango activo */}
-          <p className="text-xs text-gray-400 mb-3">
-            {consumptionView === "day"
-              ? `Días del mes ${new Date(consumptionMonth + "-01T00:00:00").toLocaleDateString("es-AR", { month: "long", year: "numeric" })}`
-              : consumptionView === "month"
-              ? `Meses del año ${consumptionYear}`
-              : "Todos los años con consumo registrado"}
-          </p>
+          {/* Selector específico según la vista */}
+          <div className="mb-5">
+            {consumptionView === "day" && (
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-600 font-medium">Fecha:</label>
+                <input
+                  type="date"
+                  value={selectedDay}
+                  max={new Date().toISOString().split("T")[0]}
+                  onChange={(e) => setSelectedDay(e.target.value)}
+                  className="input py-1.5 text-sm"
+                />
+                <span className="text-xs text-gray-400">
+                  {new Date(selectedDay + "T00:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+                </span>
+              </div>
+            )}
+            {consumptionView === "month" && (
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-600 font-medium">Mes:</label>
+                <input
+                  type="month"
+                  value={selectedMonth}
+                  max={`${currentYear}-${String(new Date().getMonth() + 1).padStart(2, "0")}`}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="input py-1.5 text-sm"
+                />
+                <span className="text-xs text-gray-400">
+                  {new Date(selectedMonth + "-01T00:00:00").toLocaleDateString("es-AR", { month: "long", year: "numeric" })}
+                </span>
+              </div>
+            )}
+            {consumptionView === "year" && (
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-600 font-medium">Año:</label>
+                <select
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(e.target.value)}
+                  className="input py-1.5 text-sm"
+                >
+                  {yearOptions.map((y) => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
 
           {dailyLoading ? (
             <p className="text-gray-500 text-sm">Cargando...</p>
           ) : !dailyData || dailyData.length === 0 ? (
-            <p className="text-gray-500 text-sm">Sin datos para el período seleccionado.</p>
+            <p className="text-gray-500 text-sm">Sin consumo registrado para el período seleccionado.</p>
           ) : (
-            <ConsumptionTable data={dailyData} view={consumptionView} />
+            <PeriodSummary data={dailyData} />
           )}
         </div>
       )}
@@ -558,99 +570,44 @@ function FailureList({ items, total }: { items: FailureDetail[]; total: number }
   );
 }
 
-// ── Tabla de consumo por período ──────────────────────────────
+// ── Resumen de consumo de un período puntual ─────────────────
 
-type MonthRow  = { key: string; label: string; total: number; successful: number; failed: number; rejected: number };
-type YearRow   = MonthRow;
+function PeriodSummary({ data }: { data: DailyUsage[] }) {
+  const total      = data.reduce((s, d) => s + d.total_requests,      0);
+  const successful = data.reduce((s, d) => s + d.successful_requests,  0);
+  const failed     = data.reduce((s, d) => s + d.failed_requests,      0);
+  const rejected   = data.reduce((s, d) => s + d.rejected_requests,    0);
+  const pct        = total > 0 ? Math.round(successful * 100 / total) : 0;
 
-function ConsumptionTable({ data, view }: { data: DailyUsage[]; view: "day" | "month" | "year" }) {
-  const rows: MonthRow[] = (() => {
-    if (view === "day") {
-      return data.map((d) => ({
-        key:        d.date,
-        label:      new Date(d.date + "T00:00:00").toLocaleDateString("es-AR", { day: "2-digit", month: "short", year: "numeric" }),
-        total:      d.total_requests,
-        successful: d.successful_requests,
-        failed:     d.failed_requests,
-        rejected:   d.rejected_requests,
-      }));
-    }
-    const map = new Map<string, MonthRow>();
-    data.forEach((d) => {
-      const [y, m] = d.date.split("-");
-      const key   = view === "month" ? `${y}-${m}` : y;
-      const label = view === "month"
-        ? new Date(`${y}-${m}-01T00:00:00`).toLocaleDateString("es-AR", { month: "long", year: "numeric" })
-        : y;
-      const existing = map.get(key) ?? { key, label, total: 0, successful: 0, failed: 0, rejected: 0 };
-      existing.total      += d.total_requests;
-      existing.successful += d.successful_requests;
-      existing.failed     += d.failed_requests;
-      existing.rejected   += d.rejected_requests;
-      map.set(key, existing);
-    });
-    // Vista año: solo filas con datos, orden descendente (más reciente primero)
-    const all = Array.from(map.values());
-    return view === "year"
-      ? all.filter((r) => r.total > 0).sort((a, b) => b.key.localeCompare(a.key))
-      : all;
-  })();
-
-  const grandTotal = rows.reduce((s, r) => s + r.total, 0);
+  const stats = [
+    { label: "Sellos consumidos", value: total,      color: "text-gray-900" },
+    { label: "Exitosos",          value: successful, color: "text-green-700" },
+    { label: "Errores",           value: failed,     color: "text-red-600"  },
+    { label: "Rechazados",        value: rejected,   color: "text-orange-500" },
+  ];
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead className="border-b bg-gray-50">
-          <tr>
-            <th className="text-left py-2 px-3 font-medium text-gray-600">
-              {view === "day" ? "Fecha" : view === "month" ? "Mes" : "Año"}
-            </th>
-            <th className="text-right py-2 px-3 font-medium text-gray-600">Total</th>
-            <th className="text-right py-2 px-3 font-medium text-gray-600">Exitosos</th>
-            <th className="text-right py-2 px-3 font-medium text-gray-600">Errores</th>
-            <th className="text-right py-2 px-3 font-medium text-gray-600">Rechazados</th>
-            <th className="text-right py-2 px-3 font-medium text-gray-600">% Éxito</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-100">
-          {rows.map((row) => {
-            const pct = row.total > 0 ? Math.round(row.successful * 100 / row.total) : 0;
-            return (
-              <tr key={row.key} className="hover:bg-gray-50">
-                <td className="py-2 px-3 text-gray-800">{row.label}</td>
-                <td className="text-right py-2 px-3 font-semibold">{row.total.toLocaleString("es-AR")}</td>
-                <td className="text-right py-2 px-3 text-green-700">{row.successful.toLocaleString("es-AR")}</td>
-                <td className="text-right py-2 px-3 text-red-600">{row.failed.toLocaleString("es-AR")}</td>
-                <td className="text-right py-2 px-3 text-orange-600">{row.rejected.toLocaleString("es-AR")}</td>
-                <td className="text-right py-2 px-3">
-                  <span className={`font-medium ${pct >= 95 ? "text-green-700" : pct >= 80 ? "text-yellow-600" : "text-red-600"}`}>
-                    {pct}%
-                  </span>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-        <tfoot className="border-t-2 border-gray-200 bg-gray-50">
-          <tr>
-            <td className="py-2 px-3 font-semibold text-gray-700">Total período</td>
-            <td className="text-right py-2 px-3 font-bold">{grandTotal.toLocaleString("es-AR")}</td>
-            <td className="text-right py-2 px-3 font-semibold text-green-700">
-              {rows.reduce((s, r) => s + r.successful, 0).toLocaleString("es-AR")}
-            </td>
-            <td className="text-right py-2 px-3 font-semibold text-red-600">
-              {rows.reduce((s, r) => s + r.failed, 0).toLocaleString("es-AR")}
-            </td>
-            <td className="text-right py-2 px-3 font-semibold text-orange-600">
-              {rows.reduce((s, r) => s + r.rejected, 0).toLocaleString("es-AR")}
-            </td>
-            <td className="text-right py-2 px-3 font-bold">
-              {grandTotal > 0 ? Math.round(rows.reduce((s, r) => s + r.successful, 0) * 100 / grandTotal) : 0}%
-            </td>
-          </tr>
-        </tfoot>
-      </table>
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        {stats.map((s) => (
+          <div key={s.label} className="bg-gray-50 rounded-lg p-4">
+            <p className="text-xs text-gray-500 font-medium mb-1">{s.label}</p>
+            <p className={`text-2xl font-bold ${s.color}`}>{s.value.toLocaleString("es-AR")}</p>
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center gap-3">
+        <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+          <div
+            className={`h-full rounded-full ${pct >= 95 ? "bg-green-500" : pct >= 80 ? "bg-yellow-400" : "bg-red-500"}`}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <span className={`text-sm font-semibold w-12 text-right ${pct >= 95 ? "text-green-700" : pct >= 80 ? "text-yellow-600" : "text-red-600"}`}>
+          {pct}%
+        </span>
+        <span className="text-xs text-gray-400">tasa de éxito</span>
+      </div>
     </div>
   );
 }

@@ -109,14 +109,37 @@ export default function ReportsPage() {
     refetchInterval: 4000,
   });
 
+  const [consumptionView, setConsumptionView] = useState<"day" | "month" | "year">("day");
+  const [consumptionMonth, setConsumptionMonth] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  });
+  const [consumptionYear, setConsumptionYear] = useState(() => String(new Date().getFullYear()));
+
+  // Rango de fechas propio de la sección de consumo, independiente del filtro global
+  const consumptionFrom = (() => {
+    if (consumptionView === "day") return `${consumptionMonth}-01`;
+    if (consumptionView === "month") return `${consumptionYear}-01-01`;
+    return "2019-01-01"; // vista año: toda la historia del tenant
+  })();
+  const consumptionTo = (() => {
+    if (consumptionView === "day") {
+      const [y, m] = consumptionMonth.split("-").map(Number);
+      return `${consumptionMonth}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
+    }
+    if (consumptionView === "month") return `${consumptionYear}-12-31`;
+    return new Date().toISOString().split("T")[0];
+  })();
+
   const { data: dailyData, isLoading: dailyLoading } = useQuery({
-    queryKey: ["daily-usage", tenantId, from, to],
-    queryFn: () => tenantId ? api.getDailyUsage(tenantId, from, to) : Promise.resolve(null),
+    queryKey: ["daily-usage", tenantId, consumptionFrom, consumptionTo],
+    queryFn: () => api.getDailyUsage(tenantId, consumptionFrom, consumptionTo),
     enabled: !!tenantId,
     refetchInterval: 4000,
   });
 
-  const [consumptionView, setConsumptionView] = useState<"day" | "month" | "year">("day");
+  const currentYear = new Date().getFullYear();
+  const yearOptions = Array.from({ length: 7 }, (_, i) => String(currentYear - i));
 
   async function exportPDF() {
     if (exportingPDF) return;
@@ -255,24 +278,63 @@ export default function ReportsPage() {
       {/* Consumo de sellos por período */}
       {tenantId && (
         <div className="card p-6">
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <h2 className="text-lg font-semibold text-gray-900">Consumo de sellos por período</h2>
-            <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-              {(["day", "month", "year"] as const).map((v) => (
-                <button
-                  key={v}
-                  onClick={() => setConsumptionView(v)}
-                  className={`px-3 py-1 text-sm rounded-md transition-colors ${
-                    consumptionView === v
-                      ? "bg-white text-primary-700 font-medium shadow-sm"
-                      : "text-gray-500 hover:text-gray-700"
-                  }`}
-                >
-                  {v === "day" ? "Día" : v === "month" ? "Mes" : "Año"}
-                </button>
-              ))}
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Selector de mes (vista Día) */}
+              {consumptionView === "day" && (
+                <div className="flex items-center gap-1.5">
+                  <label className="text-xs text-gray-500 whitespace-nowrap">Mes:</label>
+                  <input
+                    type="month"
+                    value={consumptionMonth}
+                    onChange={(e) => setConsumptionMonth(e.target.value)}
+                    className="input py-1 text-sm"
+                  />
+                </div>
+              )}
+              {/* Selector de año (vista Mes) */}
+              {consumptionView === "month" && (
+                <div className="flex items-center gap-1.5">
+                  <label className="text-xs text-gray-500 whitespace-nowrap">Año:</label>
+                  <select
+                    value={consumptionYear}
+                    onChange={(e) => setConsumptionYear(e.target.value)}
+                    className="input py-1 text-sm"
+                  >
+                    {yearOptions.map((y) => (
+                      <option key={y} value={y}>{y}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              {/* Pestañas de vista */}
+              <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+                {(["day", "month", "year"] as const).map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => setConsumptionView(v)}
+                    className={`px-3 py-1 text-sm rounded-md transition-colors ${
+                      consumptionView === v
+                        ? "bg-white text-primary-700 font-medium shadow-sm"
+                        : "text-gray-500 hover:text-gray-700"
+                    }`}
+                  >
+                    {v === "day" ? "Día" : v === "month" ? "Mes" : "Año"}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
+
+          {/* Subtítulo descriptivo del rango activo */}
+          <p className="text-xs text-gray-400 mb-3">
+            {consumptionView === "day"
+              ? `Días del mes ${new Date(consumptionMonth + "-01T00:00:00").toLocaleDateString("es-AR", { month: "long", year: "numeric" })}`
+              : consumptionView === "month"
+              ? `Meses del año ${consumptionYear}`
+              : "Todos los años con consumo registrado"}
+          </p>
 
           {dailyLoading ? (
             <p className="text-gray-500 text-sm">Cargando...</p>
@@ -502,7 +564,6 @@ type MonthRow  = { key: string; label: string; total: number; successful: number
 type YearRow   = MonthRow;
 
 function ConsumptionTable({ data, view }: { data: DailyUsage[]; view: "day" | "month" | "year" }) {
-  // Agregar datos según la vista seleccionada
   const rows: MonthRow[] = (() => {
     if (view === "day") {
       return data.map((d) => ({
@@ -528,7 +589,11 @@ function ConsumptionTable({ data, view }: { data: DailyUsage[]; view: "day" | "m
       existing.rejected   += d.rejected_requests;
       map.set(key, existing);
     });
-    return Array.from(map.values());
+    // Vista año: solo filas con datos, orden descendente (más reciente primero)
+    const all = Array.from(map.values());
+    return view === "year"
+      ? all.filter((r) => r.total > 0).sort((a, b) => b.key.localeCompare(a.key))
+      : all;
   })();
 
   const grandTotal = rows.reduce((s, r) => s + r.total, 0);

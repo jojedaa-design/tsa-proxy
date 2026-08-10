@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { api, type DashboardSummary } from "@/lib/api";
+import { api, type DashboardSummary, type HardwareMetrics } from "@/lib/api";
 
 function StatCard({ title, value, sub, color }: {
   title: string;
@@ -171,8 +171,38 @@ export default function DashboardPage() {
   );
 }
 
+function gaugeColor(pct: number) {
+  if (pct >= 85) return "bg-red-500";
+  if (pct >= 65) return "bg-yellow-400";
+  return "bg-green-500";
+}
+
+function fmtKBPS(kbps: number) {
+  if (kbps >= 1024) return `${(kbps / 1024).toFixed(1)} MB/s`;
+  return `${kbps.toFixed(0)} KB/s`;
+}
+
+function HardwareGauge({ label, pct, detail }: { label: string; pct: number; detail: string }) {
+  const p = Math.round(pct);
+  return (
+    <div>
+      <div className="flex justify-between text-sm mb-1">
+        <span className="text-gray-600 font-medium">{label}</span>
+        <span className="text-gray-500 text-xs">{detail}</span>
+      </div>
+      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-700 ${gaugeColor(p)}`}
+          style={{ width: `${Math.min(p, 100)}%` }}
+        />
+      </div>
+      <p className="text-xs text-gray-400 mt-0.5 text-right">{p}%</p>
+    </div>
+  );
+}
+
 function SystemStatus() {
-  const { data } = useQuery({
+  const { data: health } = useQuery({
     queryKey: ["health"],
     queryFn: async () => {
       const res = await fetch("/ready");
@@ -181,29 +211,71 @@ function SystemStatus() {
     refetchInterval: 4000,
   });
 
-  const items = [
-    { label: "API Backend", status: data?.status === "ready" ? "ok" : "checking" },
-    { label: "PostgreSQL",  status: data?.postgres ?? "checking" },
-    { label: "Redis",       status: data?.redis ?? "checking" },
-    { label: "Autoridad TSA", status: "ok" }, // Se verifica via backend
+  const { data: hw } = useQuery<HardwareMetrics>({
+    queryKey: ["system-hardware"],
+    queryFn: () => api.getHardwareMetrics(),
+    refetchInterval: 3000,
+  });
+
+  const services = [
+    { label: "API Backend",   status: health?.status === "ready" ? "ok" : "checking" },
+    { label: "PostgreSQL",    status: health?.postgres ?? "checking" },
+    { label: "Redis",         status: health?.redis ?? "checking" },
+    { label: "Autoridad TSA", status: "ok" },
   ];
 
   return (
-    <div className="space-y-3">
-      {items.map((item) => (
-        <div key={item.label} className="flex items-center justify-between">
-          <span className="text-sm text-gray-600">{item.label}</span>
-          <span className={`badge ${
-            item.status === "ok" ? "badge-green" :
-            item.status === "checking" ? "badge-yellow" :
-            "badge-red"
-          }`}>
-            {item.status === "ok" ? "Operativo" :
-             item.status === "checking" ? "Verificando..." :
-             "Error"}
-          </span>
-        </div>
-      ))}
+    <div className="space-y-6">
+      {/* Servicios */}
+      <div className="space-y-3">
+        {services.map((item) => (
+          <div key={item.label} className="flex items-center justify-between">
+            <span className="text-sm text-gray-600">{item.label}</span>
+            <span className={`badge ${
+              item.status === "ok"       ? "badge-green" :
+              item.status === "checking" ? "badge-yellow" :
+              "badge-red"
+            }`}>
+              {item.status === "ok"       ? "Operativo" :
+               item.status === "checking" ? "Verificando..." :
+               "Error"}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Hardware */}
+      <div>
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">Recursos del servidor</h3>
+        {hw ? (
+          <div className="space-y-3">
+            <HardwareGauge
+              label="CPU"
+              pct={hw.cpu_percent}
+              detail={`${hw.cpu_percent.toFixed(1)}%`}
+            />
+            <HardwareGauge
+              label="Memoria"
+              pct={hw.mem_percent}
+              detail={`${hw.mem_used_mb.toLocaleString()} / ${hw.mem_total_mb.toLocaleString()} MB`}
+            />
+            <HardwareGauge
+              label="Almacenamiento"
+              pct={hw.disk_percent}
+              detail={`${hw.disk_used_gb.toFixed(1)} / ${hw.disk_total_gb.toFixed(1)} GB`}
+            />
+            <div>
+              <p className="text-sm text-gray-600 font-medium mb-1">Red</p>
+              <div className="flex gap-4 text-xs text-gray-500">
+                <span>↓ {fmtKBPS(hw.net_rx_kbps)}</span>
+                <span>↑ {fmtKBPS(hw.net_tx_kbps)}</span>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <p className="text-xs text-gray-400">Cargando métricas...</p>
+        )}
+      </div>
     </div>
   );
 }

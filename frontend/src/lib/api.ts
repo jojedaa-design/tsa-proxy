@@ -221,6 +221,18 @@ export interface PlatformUser {
   last_login_at?: string;
 }
 
+export interface HardwareMetrics {
+  cpu_percent: number;
+  mem_percent: number;
+  mem_used_mb: number;
+  mem_total_mb: number;
+  disk_percent: number;
+  disk_used_gb: number;
+  disk_total_gb: number;
+  net_rx_kbps: number;
+  net_tx_kbps: number;
+}
+
 export interface DailyUsage {
   date: string; // YYYY-MM-DD
   total_requests: number;
@@ -621,6 +633,10 @@ export const api = {
   async getDailyUsage(tenantId: string, from: string, to: string) {
     const q = new URLSearchParams({ tenant_id: tenantId, from, to });
     return apiFetch<DailyUsage[]>(`/api/admin/v1/reports/daily-usage?${q}`);
+  },
+
+  async getHardwareMetrics() {
+    return apiFetch<HardwareMetrics>("/api/admin/v1/system/hardware");
   },
 
   async updateBundleAlert(tenantId: string, bundleId: string, alertThresholdPercent: number | null) {

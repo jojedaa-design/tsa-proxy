@@ -25,6 +25,7 @@ import (
 	"github.com/bigdavi/tsa-proxy/internal/service/geoloc"
 	notifysvc "github.com/bigdavi/tsa-proxy/internal/service/notification"
 	proxysvc "github.com/bigdavi/tsa-proxy/internal/service/proxy"
+	sysmetsvc "github.com/bigdavi/tsa-proxy/internal/service/sysmetrics"
 	tenantsvc "github.com/bigdavi/tsa-proxy/internal/service/tenant"
 	"github.com/bigdavi/tsa-proxy/internal/upstream"
 )
@@ -108,6 +109,10 @@ func main() {
 	notifyClient := notifysvc.New(cfg.Notification.BrevoAPIKey)
 	proxyService  := proxysvc.NewService(cfg, tsaClient, quotaRepo, usageRepo, rateLimiter, credRepo, upstreamRepo, tenantRepo, alertEmailRepo, geolocator, cache, notifyClient)
 
+	// Métricas de hardware (muestreo en background cada 2 s)
+	sysSampler := sysmetsvc.New()
+	sysSampler.Start()
+
 	// ── Middlewares ───────────────────────────────────────────────
 	authMW      := middleware.NewAuthMiddleware(credRepo, cache, failedRepo)
 	adminAuthMW := middleware.NewAdminAuthMiddleware(cfg)
@@ -132,6 +137,7 @@ func main() {
 	adminConfigH  := adminhandler.NewConfigHandler(upstreamRepo, quotaRepo, cache, auditRepo, cfg.Upstream.AllowedHosts)
 	adminUsersH   := adminhandler.NewUsersHandler(adminUserRepo, tenantRepo, authService)
 	adminAlertsH  := adminhandler.NewAlertsHandler(alertEmailRepo, tenantService, notifyClient)
+	adminSystemH  := adminhandler.NewSystemHandler(sysSampler)
 
 	// ── Router ────────────────────────────────────────────────────
 	router := server.NewRouter(&server.Deps{
@@ -156,6 +162,7 @@ func main() {
 		AdminBasicAuth:   adminBasicAuthH,
 		AdminNoAuth:      adminNoAuthH,
 		AdminAlerts:      adminAlertsH,
+		AdminSystem:      adminSystemH,
 	})
 
 	// ── HTTP Server ───────────────────────────────────────────────

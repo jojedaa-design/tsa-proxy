@@ -38,6 +38,7 @@ type Deps struct {
 	AdminBasicAuth *adminhandler.BasicAuthHandler
 	AdminNoAuth    *adminhandler.NoAuthHandler
 	AdminAlerts    *adminhandler.AlertsHandler
+	AdminSystem    *adminhandler.SystemHandler
 }
 
 // NewRouter construye el árbol de rutas completo.
@@ -241,6 +242,9 @@ func NewRouter(d *Deps) http.Handler {
 			})
 
 			r.Get("/audit-events", d.AdminAudit.List)
+
+			// Métricas de hardware del servidor (cualquier rol autenticado)
+			r.Get("/system/hardware", d.AdminSystem.Hardware)
 		})
 	})
 

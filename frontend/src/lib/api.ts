@@ -250,7 +250,6 @@ export interface Role {
 export interface TOTP2FASetup {
   secret: string;
   qr_url: string;
-  totp_enabled: boolean;
 }
 
 export interface TSAUpstream {

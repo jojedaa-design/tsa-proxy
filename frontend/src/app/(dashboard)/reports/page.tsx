@@ -4,7 +4,13 @@ import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, type FailureDetail, type DailyUsage } from "@/lib/api";
 import { generateConsumptionReportPDF } from "@/lib/pdfReport";
-import { formatDateOnly, formatDateTime } from "@/lib/dateFormat";
+import {
+  formatDateOnly,
+  formatDateTime,
+  todayInLima,
+  currentMonthInLima,
+  currentYearInLima,
+} from "@/lib/dateFormat";
 
 // ── Helpers de categoría ──────────────────────────────────────
 
@@ -111,12 +117,9 @@ export default function ReportsPage() {
   });
 
   const [consumptionView, setConsumptionView] = useState<"day" | "month" | "year">("day");
-  const [selectedDay, setSelectedDay] = useState(() => new Date().toISOString().split("T")[0]);
-  const [selectedMonth, setSelectedMonth] = useState(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-  });
-  const [selectedYear, setSelectedYear] = useState(() => String(new Date().getFullYear()));
+  const [selectedDay, setSelectedDay] = useState(todayInLima);
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthInLima);
+  const [selectedYear, setSelectedYear] = useState(() => String(currentYearInLima()));
 
   // Rango exacto según la vista activa
   const consumptionFrom = consumptionView === "day"
@@ -141,7 +144,7 @@ export default function ReportsPage() {
     refetchInterval: 4000,
   });
 
-  const currentYear = new Date().getFullYear();
+  const currentYear = currentYearInLima();
   const yearOptions = Array.from({ length: 7 }, (_, i) => String(currentYear - i));
 
   async function exportPDF() {

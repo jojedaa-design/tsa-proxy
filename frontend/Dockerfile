@@ -24,6 +24,10 @@ RUN npm run build
 FROM node:20-alpine AS runner
 WORKDIR /app
 
+# tzdata: sin él, Alpine ignora la variable TZ y el contenedor corre en UTC,
+# así que todo lo que Next.js renderice en servidor saldría con hora equivocada.
+RUN apk add --no-cache tzdata
+
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 

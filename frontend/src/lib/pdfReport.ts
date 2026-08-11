@@ -1,6 +1,7 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { IPUsage, UserAgentStat, FailureBreakdownResponse, DailyUsage } from "./api";
+import { formatDateOnly, formatDateTime } from "./dateFormat";
 
 // ── Colores de marca (BIGDAVI) ───────────────────────────────
 const NAVY: [number, number, number] = [11, 31, 58];
@@ -43,7 +44,7 @@ const MAX_FAILURE_ROWS = 5;
 
 function fmtDate(iso: string): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("es-AR");
+  return formatDateOnly(iso);
 }
 
 function fmtLabel(key: string): string {
@@ -113,10 +114,7 @@ export async function generateConsumptionReportPDF(input: ConsumptionReportInput
   const contentWidth = pageWidth - margin * 2;
 
   const now = new Date();
-  const generatedAt = now.toLocaleString("es-AR", {
-    day: "2-digit", month: "2-digit", year: "numeric",
-    hour: "2-digit", minute: "2-digit", second: "2-digit",
-  });
+  const generatedAt = formatDateTime(now);
 
   const logo = await loadLogoAsPng();
 

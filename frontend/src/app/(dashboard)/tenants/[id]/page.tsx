@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { api, BasicAuthCredential, AlertEmail } from "@/lib/api";
+import { formatDateTime, formatDateOnly } from "@/lib/dateFormat";
 
 type Tab = "credentials" | "ip-allowlist" | "quota" | "basic-auth" | "noauth" | "alerts";
 
@@ -421,7 +422,7 @@ export default function TenantDetailPage() {
                     </td>
                     <td className="px-4 py-3 text-gray-500 text-xs">
                       {c.last_used_at
-                        ? new Date(c.last_used_at).toLocaleString("es-AR")
+                        ? formatDateTime(c.last_used_at)
                         : "Nunca usada"}
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -512,7 +513,7 @@ export default function TenantDetailPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-gray-500 text-xs">
-                      {new Date(c.created_at).toLocaleString("es-AR")}
+                      {formatDateTime(c.created_at)}
                     </td>
                     <td className="px-4 py-3 text-right">
                       {c.status === "active" && (
@@ -946,7 +947,7 @@ function QuotaForm({ tenantId, initialQuota }: {
                   const editVal = editingAlert[b.id] ?? "";
                   return (
                     <tr key={b.id} className="border-b hover:bg-gray-50">
-                      <td className="py-3 pr-4">{new Date(b.contracted_at).toLocaleDateString("es-AR")}</td>
+                      <td className="py-3 pr-4">{formatDateOnly(b.contracted_at)}</td>
                       <td className="text-right font-medium py-3 px-4">{b.amount.toLocaleString()}</td>
                       <td className="text-gray-600 py-3 pl-4">{b.note || "—"}</td>
                       <td className="py-2 px-4">

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, type FailureDetail, type DailyUsage } from "@/lib/api";
 import { generateConsumptionReportPDF } from "@/lib/pdfReport";
+import { formatDateOnly, formatDateTime } from "@/lib/dateFormat";
 
 // ── Helpers de categoría ──────────────────────────────────────
 
@@ -250,7 +251,7 @@ export default function ReportsPage() {
                     const pct = (bundle.consumed / bundle.amount) * 100;
                     return (
                       <tr key={bundle.id} className="border-b">
-                        <td className="py-3 pr-4">{new Date(bundle.contracted_at).toLocaleDateString("es-AR")}</td>
+                        <td className="py-3 pr-4">{formatDateOnly(bundle.contracted_at)}</td>
                         <td className="text-right font-medium py-3 px-4">{bundle.amount.toLocaleString()}</td>
                         <td className="text-right py-3 px-4">
                           <div className="flex items-center justify-end gap-2">
@@ -313,7 +314,7 @@ export default function ReportsPage() {
                   className="input py-1.5 text-sm"
                 />
                 <span className="text-xs text-gray-400">
-                  {new Date(selectedDay + "T00:00:00").toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+                  {formatDateOnly(selectedDay)}
                 </span>
               </div>
             )}
@@ -328,7 +329,7 @@ export default function ReportsPage() {
                   className="input py-1.5 text-sm"
                 />
                 <span className="text-xs text-gray-400">
-                  {new Date(selectedMonth + "-01T00:00:00").toLocaleDateString("es-AR", { month: "long", year: "numeric" })}
+                  {formatDateOnly(selectedMonth + "-01")}
                 </span>
               </div>
             )}
@@ -461,7 +462,7 @@ export default function ReportsPage() {
                     {ip.fail_count.toLocaleString()}
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-500">
-                    {ip.last_used_at ? new Date(ip.last_used_at).toLocaleString("es-AR") : "—"}
+                    {ip.last_used_at ? formatDateTime(ip.last_used_at) : "—"}
                   </td>
                 </tr>
               ))}
@@ -561,7 +562,7 @@ function FailureList({ items, total }: { items: FailureDetail[]; total: number }
               />
             </div>
             <p className="text-xs text-gray-400 mt-0.5">
-              Último: {new Date(item.last_seen).toLocaleString("es-AR")}
+              Último: {formatDateTime(item.last_seen)}
             </p>
           </div>
         );

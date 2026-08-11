@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { api, type Tenant, type APICredential } from "@/lib/api";
+import { formatDateOnly } from "@/lib/dateFormat";
 
 export default function TenantsPage() {
   const qc = useQueryClient();
@@ -202,7 +203,7 @@ function TenantRow({ tenant, onSuspend, onReactivate, onDelete }: {
         </span>
       </td>
       <td className="px-4 py-3 text-gray-500 text-xs">
-        {new Date(tenant.created_at).toLocaleDateString("es-AR")}
+        {formatDateOnly(tenant.created_at)}
       </td>
       <td className="px-4 py-3 text-right">
         <div className="flex justify-end gap-2">

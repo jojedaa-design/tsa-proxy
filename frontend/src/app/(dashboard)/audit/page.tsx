@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, type AuditEvent } from "@/lib/api";
+import { formatDateTime } from "@/lib/dateFormat";
 
 const ACTION_COLORS: Record<string, string> = {
   "tenant.create":     "badge-green",
@@ -130,7 +131,7 @@ function AuditRow({ event }: { event: AuditEvent }) {
         onClick={() => event.changes && setExpanded(!expanded)}
       >
         <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
-          {new Date(event.occurred_at).toLocaleString("es-AR")}
+          {formatDateTime(event.occurred_at)}
         </td>
         <td className="px-4 py-3 text-gray-700">
           {event.actor_name || <span className="text-gray-400">sistema</span>}

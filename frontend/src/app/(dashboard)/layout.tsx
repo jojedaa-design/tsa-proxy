@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { getToken, api } from "@/lib/api";
+import { formatDateOnly } from "@/lib/dateFormat";
 
 // Cierre de sesión por inactividad — 5 minutos sin interacción real del
 // usuario (mouse, teclado, touch). Deliberadamente NO se basa en actividad
@@ -188,7 +189,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </button>
           <div className="flex-1" />
           <div className="text-sm text-gray-500">
-            {new Date().toLocaleDateString("es-AR", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+            {formatDateOnly(new Date())}
           </div>
         </header>
 

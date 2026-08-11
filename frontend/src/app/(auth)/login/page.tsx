@@ -14,6 +14,7 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [expiredNotice, setExpiredNotice] = useState(false);
+  const [modal, setModal] = useState<null | "terms" | "privacy">(null);
 
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("expired") === "1") {
@@ -105,7 +106,8 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-8">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 py-8 px-4">
+      {modal && <DocumentModal doc={modal} onClose={() => setModal(null)} />}
       <div className={`w-full ${setupRequired ? "max-w-xl" : "max-w-md"}`}>
         {/* Logo / título */}
         <div className="text-center mb-8">
@@ -309,6 +311,65 @@ export default function LoginPage() {
             </form>
           )}
         </div>
+
+        <footer className="mt-6 text-center space-y-2">
+          <div className="flex items-center justify-center gap-3 text-xs text-gray-400">
+            <button
+              type="button"
+              onClick={() => setModal("terms")}
+              className="hover:text-gray-600 underline-offset-2 hover:underline transition-colors"
+            >
+              Términos y Condiciones
+            </button>
+            <span aria-hidden>·</span>
+            <button
+              type="button"
+              onClick={() => setModal("privacy")}
+              className="hover:text-gray-600 underline-offset-2 hover:underline transition-colors"
+            >
+              Política de Privacidad
+            </button>
+          </div>
+          <p className="text-xs text-gray-400">
+            © {new Date().getFullYear()} BIGDAVI S.A.C. · Todos los derechos reservados
+          </p>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+function DocumentModal({ doc, onClose }: { doc: "terms" | "privacy"; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4"
+      style={{ background: "rgba(0,0,0,0.6)" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="relative w-full h-full max-w-6xl max-h-[95vh] flex flex-col bg-white rounded-xl overflow-hidden shadow-2xl">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50 flex-shrink-0">
+          <span className="text-sm font-semibold text-gray-700">
+            {doc === "terms" ? "Términos y Condiciones" : "Política de Privacidad"}
+          </span>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 hover:text-gray-900 hover:bg-gray-200 transition-colors text-xl leading-none"
+            aria-label="Cerrar"
+          >
+            ×
+          </button>
+        </div>
+        <iframe
+          src={doc === "terms" ? "/legal/terminos.html" : "/legal/privacidad.html"}
+          className="flex-1 w-full border-0"
+          title={doc === "terms" ? "Términos y Condiciones" : "Política de Privacidad"}
+        />
       </div>
     </div>
   );

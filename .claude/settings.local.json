@@ -144,7 +144,28 @@
       "Bash(scp idx.sql qa-tsa:/tmp/idx.sql)",
       "Bash(scp align_prod.sql prod-tsa:/tmp/align_prod.sql)",
       "Bash(npx tsc *)",
-      "Bash(echo \"--- exit: $? ---\")"
+      "Bash(echo \"--- exit: $? ---\")",
+      "Bash(xargs grep -l \"chi\\\\|router\\\\|mux\")",
+      "Bash(ssh prod-tsa 'cd /opt/tsa-proxy && D=$\\(grep \"^POSTGRES_USER=\" .env|cut -d= -f2\\) && N=$\\(grep \"^POSTGRES_DB=\" .env|cut -d= -f2\\) && docker compose exec -T postgres psql -U \"$D\" -d \"$N\" -c \" *)",
+      "Bash(git log *)",
+      "Bash(find ~/.gradle/caches/modules-2/files-2.1 -name \"dss-spi-6.3.jar\" 2>/dev/null | head -1)",
+      "Bash(javap -cp dss-spi-6.3.jar eu.europa.esig.dss.spi.x509.revocation.RevocationToken)",
+      "Bash(javap -cp \"C:/Users/jesus/.gradle/caches/modules-2/files-2.1/eu.europa.ec.joinup.sd-dss/dss-enumerations/6.3/31312ad1532f0bc4865383e02138154a1c2383e4/dss-enumerations-6.3.jar\" eu.europa.esig.dss.enumerations.CertificateStatus)",
+      "Bash(./gradlew.bat compileJava --console=plain)",
+      "PowerShell(& \"C:\\\\Users\\\\jesus\\\\.claude\\\\projects\\\\C--dev-tsa-proxy\\\\memory\\\\regenerate_graphify.ps1\" -Project davisign)",
+      "Bash(./gradlew.bat compileJava --rerun-tasks --console=plain)",
+      "Bash(./gradlew.bat compileJava --rerun-tasks --console=plain -Dorg.gradle.warning.mode=all)",
+      "Bash(./gradlew.bat compileJava)",
+      "Bash(powershell -ExecutionPolicy Bypass -File regenerate_graphify.ps1 -Project davisign)",
+      "Bash(./gradlew clean *)",
+      "Bash(./gradlew run *)",
+      "Bash(find ~ -maxdepth 5 -type f \\\\\\( -name \"*logo*\" -o -name \"*DAVISIGN*\" \\\\\\) \\\\\\( -name \"*.png\" -o -name \"*.jpg\" -o -name \"*.jpeg\" \\\\\\) 2>/dev/null | grep -v \".davisign\\\\|.gradle\\\\|.git\" | head -20)",
+      "Bash(./gradlew build *)",
+      "PowerShell(\"Nucleos logicos: $\\([Environment]::ProcessorCount\\)\")",
+      "Bash(cp /c/dev/davisign/src/main/resources/images/icon.png /c/Users/jesus/AppData/Local/Temp/claude/C--dev-tsa-proxy/79a4010a-4f34-4c35-81a2-6f08903a5de9/scratchpad/icon.png.bak)",
+      "Bash(cp /c/dev/davisign/src/main/resources/images/icon.ico /c/Users/jesus/AppData/Local/Temp/claude/C--dev-tsa-proxy/79a4010a-4f34-4c35-81a2-6f08903a5de9/scratchpad/icon.ico.bak)",
+      "Bash(timeout 40 ./gradlew run)",
+      "Bash(timeout 35 ./gradlew run)"
     ]
   }
 }

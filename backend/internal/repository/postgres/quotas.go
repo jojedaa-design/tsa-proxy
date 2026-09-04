@@ -51,7 +51,7 @@ func (r *QuotaRepository) Upsert(ctx context.Context, q *model.TenantQuota) (*mo
 func (r *QuotaRepository) GetTotalConsumption(ctx context.Context, tenantID uuid.UUID) (int, error) {
 	var total int
 	err := r.pool.QueryRow(ctx, `
-		SELECT COALESCE(SUM(total_requests), 0) FROM monthly_usage_aggregates
+		SELECT COALESCE(SUM(successful_requests), 0) FROM monthly_usage_aggregates
 		WHERE tenant_id=$1
 	`, tenantID).Scan(&total)
 	if err == pgx.ErrNoRows {

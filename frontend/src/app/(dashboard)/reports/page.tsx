@@ -285,7 +285,7 @@ export default function ReportsPage() {
       {tenantId && (
         <div className="card p-6">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-            <h2 className="text-lg font-semibold text-gray-900">Consumo de sellos por período</h2>
+            <h2 className="text-lg font-semibold text-gray-900">Actividad de sellos por período</h2>
             {/* Pestañas de vista */}
             <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
               {(["day", "month", "year"] as const).map((v) => (
@@ -584,10 +584,10 @@ function PeriodSummary({ data }: { data: DailyUsage[] }) {
   const pct        = total > 0 ? Math.round(successful * 100 / total) : 0;
 
   const stats = [
-    { label: "Sellos consumidos", value: total,      color: "text-gray-900" },
-    { label: "Exitosos",          value: successful, color: "text-green-700" },
-    { label: "Errores",           value: failed,     color: "text-red-600"  },
-    { label: "Rechazados",        value: rejected,   color: "text-orange-500" },
+    { label: "Solicitudes totales", value: total,      color: "text-gray-900" },
+    { label: "Exitosos (consumen bolsa)", value: successful, color: "text-green-700" },
+    { label: "Errores",             value: failed,     color: "text-red-600"  },
+    { label: "Rechazados",          value: rejected,   color: "text-orange-500" },
   ];
 
   return (

@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 
 	"github.com/bigdavi/tsa-proxy/internal/apierr"
 	"github.com/bigdavi/tsa-proxy/internal/config"
@@ -77,9 +78,15 @@ func (m *RateLimitMiddleware) PerTenant(next http.Handler) http.Handler {
 		w.Header().Set("X-RateLimit-Tenant-Remaining", strconv.Itoa(remaining))
 
 		if !allowed {
+			clientIP := r.Header.Get("X-Real-IP")
+			if clientIP == "" {
+				clientIP = r.RemoteAddr
+			}
 			go func() {
 				tid := tenantID
-				_ = recordFailedFromCtx(context.Background(), m.rl.FailedRepo(), &tid, nil, "", "rate_limited", rid)
+				if err := recordFailedFromCtx(context.Background(), m.rl.FailedRepo(), &tid, nil, clientIP, "rate_limited", rid); err != nil {
+					log.Warn().Err(err).Str("tenant_id", tid.String()).Msg("failed to record rate_limited failure")
+				}
 			}()
 			w.Header().Set("Retry-After", "60")
 			apierr.WriteErrorWithExtra(w, r, apierr.ErrRateLimited, map[string]interface{}{

@@ -38,17 +38,20 @@ const tspCacheTTL = 5 * time.Minute
 type TSPAuthMiddleware struct {
 	basicRepo  *postgres.BasicAuthRepository
 	noauthRepo *postgres.NoAuthRepository
+	credRepo   *postgres.CredentialRepository
 	cache      *rediscache.Cache
 }
 
 func NewTSPAuthMiddleware(
 	basicRepo *postgres.BasicAuthRepository,
 	noauthRepo *postgres.NoAuthRepository,
+	credRepo *postgres.CredentialRepository,
 	cache *rediscache.Cache,
 ) *TSPAuthMiddleware {
 	return &TSPAuthMiddleware{
 		basicRepo:  basicRepo,
 		noauthRepo: noauthRepo,
+		credRepo:   credRepo,
 		cache:      cache,
 	}
 }
@@ -182,11 +185,20 @@ func (m *TSPAuthMiddleware) Authenticate(next http.Handler) http.Handler {
 			credentialID = uuid.Nil // sin credencial específica en este flujo
 		}
 
+		// Burst limit real del tenant (tenant_quotas.burst_per_minute). 60 es
+		// solo el valor de respaldo si la consulta falla o el tenant no tiene
+		// cuota configurada — antes quedaba hardcodeado en 60 siempre, así que
+		// subir el límite de un tenant en la base de datos no tenía efecto.
+		burstLimit := 60
+		if limit, err := m.credRepo.GetTenantBurstLimit(ctx, tenantID); err == nil && limit > 0 {
+			burstLimit = limit
+		}
+
 		// Inyectar en contexto
 		ctx = context.WithValue(ctx, model.CtxKeyTenantID, tenantID)
 		ctx = context.WithValue(ctx, model.CtxKeyCredentialID, credentialID)
 		ctx = context.WithValue(ctx, model.CtxKeyClientIP, clientIP)
-		ctx = context.WithValue(ctx, model.CtxKeyBurstLimit, 60)
+		ctx = context.WithValue(ctx, model.CtxKeyBurstLimit, burstLimit)
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

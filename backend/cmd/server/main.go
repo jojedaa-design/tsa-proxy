@@ -119,7 +119,7 @@ func main() {
 	rateLimitMW := middleware.NewRateLimitMiddleware(rateLimiter, cfg)
 	ipAllowMW   := middleware.NewIPAllowlistMiddleware(ipAllowRepo, cache, failedRepo)
 	basicAuthMW := middleware.NewBasicAuthMiddleware(basicAuthRepo, cache)
-	tspAuthMW   := middleware.NewTSPAuthMiddleware(basicAuthRepo, noauthRepo, cache)
+	tspAuthMW   := middleware.NewTSPAuthMiddleware(basicAuthRepo, noauthRepo, credRepo, cache)
 
 	// ── Handlers ─────────────────────────────────────────────────
 	healthH    := healthhandler.NewHandler(cfg, pgPool, redisClient)

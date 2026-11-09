@@ -33,7 +33,18 @@ function partsOf(formatter: Intl.DateTimeFormat, d: Date): Record<string, string
   return parts;
 }
 
+// "YYYY-MM-DD" es una fecha de calendario, no un instante: new Date() la toma como
+// medianoche UTC, que en Lima es el día anterior (2026-11-09 saldría como 08/11/26).
+const CALENDAR_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
 export function formatDate(date: string | Date, includeTime: boolean = false): string {
+  if (typeof date === "string") {
+    const m = CALENDAR_DATE.exec(date);
+    if (m) {
+      const dateStr = `${m[3]}/${m[2]}/${m[1].slice(2)}`;
+      return includeTime ? `${dateStr} 00:00:00` : dateStr;
+    }
+  }
   const d = typeof date === "string" ? new Date(date) : date;
   if (isNaN(d.getTime())) return "—";
 

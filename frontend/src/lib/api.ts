@@ -585,28 +585,31 @@ export const api = {
     );
   },
 
-  async getTopIPs(params: { from?: string; to?: string }) {
+  async getTopIPs(params: { tenant_id?: string; from?: string; to?: string }) {
     const q = new URLSearchParams();
     if (params.from) q.set("from", params.from);
     if (params.to) q.set("to", params.to);
+    if (params.tenant_id) q.set("tenant_id", params.tenant_id);
     return apiFetch<{ data: IPUsage[] }>(
       `/api/admin/v1/reports/top-ips?${q}`
     );
   },
 
-  async getTopUserAgents(params: { from?: string; to?: string }) {
+  async getTopUserAgents(params: { tenant_id?: string; from?: string; to?: string }) {
     const q = new URLSearchParams();
     if (params.from) q.set("from", params.from);
     if (params.to) q.set("to", params.to);
+    if (params.tenant_id) q.set("tenant_id", params.tenant_id);
     return apiFetch<{ data: UserAgentStat[] }>(
       `/api/admin/v1/reports/top-user-agents?${q}`
     );
   },
 
-  async getTopCountries(params: { from?: string; to?: string }) {
+  async getTopCountries(params: { tenant_id?: string; from?: string; to?: string }) {
     const q = new URLSearchParams();
     if (params.from) q.set("from", params.from);
     if (params.to) q.set("to", params.to);
+    if (params.tenant_id) q.set("tenant_id", params.tenant_id);
     return apiFetch<{ data: CountryStat[] }>(
       `/api/admin/v1/reports/top-countries?${q}`
     );

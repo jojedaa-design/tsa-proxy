@@ -244,7 +244,7 @@ func (h *ReportsHandler) TopIPs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ips, err := h.usageRepo.GetTopIPs(r.Context(), f.From, f.To, 50, allowed)
+	ips, err := h.usageRepo.GetTopIPs(r.Context(), f.From, f.To, 50, narrowToRequestedTenant(allowed, f.TenantID))
 	if err != nil {
 		apierr.WriteError(w, r, apierr.ErrInternal)
 		return
@@ -267,7 +267,7 @@ func (h *ReportsHandler) TopUserAgents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	agents, err := h.usageRepo.GetTopUserAgents(r.Context(), f.From, f.To, 50, allowed)
+	agents, err := h.usageRepo.GetTopUserAgents(r.Context(), f.From, f.To, 50, narrowToRequestedTenant(allowed, f.TenantID))
 	if err != nil {
 		apierr.WriteError(w, r, apierr.ErrInternal)
 		return
@@ -290,7 +290,7 @@ func (h *ReportsHandler) TopCountries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	countries, err := h.usageRepo.GetTopCountries(r.Context(), f.From, f.To, 50, allowed)
+	countries, err := h.usageRepo.GetTopCountries(r.Context(), f.From, f.To, 50, narrowToRequestedTenant(allowed, f.TenantID))
 	if err != nil {
 		apierr.WriteError(w, r, apierr.ErrInternal)
 		return
@@ -375,6 +375,17 @@ func toFailureDetail(reason string, count int, lastSeen time.Time) *FailureDetai
 }
 
 // ─── helpers ─────────────────────────────────────────────────
+
+// narrowToRequestedTenant restringe el alcance al cliente pedido con ?tenant_id=.
+// resolveTenantScope devuelve nil (sin restricción) para admin/superadmin aunque
+// pidan un cliente concreto, así que sin esto los reportes por IP, user agent y
+// país mezclaban datos de otros clientes. Para un viewer, allowed ya es ese cliente.
+func narrowToRequestedTenant(allowed []uuid.UUID, requested *uuid.UUID) []uuid.UUID {
+	if requested != nil && allowed == nil {
+		return []uuid.UUID{*requested}
+	}
+	return allowed
+}
 
 func parseUsageFilter(r *http.Request) (*postgres.UsageFilter, error) {
 	q := r.URL.Query()

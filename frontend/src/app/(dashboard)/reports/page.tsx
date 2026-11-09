@@ -88,14 +88,14 @@ export default function ReportsPage() {
   });
 
   const { data: ipsData, isLoading: ipsLoading } = useQuery({
-    queryKey: ["top-ips", from, to],
-    queryFn: () => api.getTopIPs({ from, to }),
+    queryKey: ["top-ips", from, to, tenantId],
+    queryFn: () => api.getTopIPs({ from, to, tenant_id: tenantId || undefined }),
     refetchInterval: 4000,
   });
 
   const { data: agentsData, isLoading: agentsLoading } = useQuery({
-    queryKey: ["top-user-agents", from, to],
-    queryFn: () => api.getTopUserAgents({ from, to }),
+    queryKey: ["top-user-agents", from, to, tenantId],
+    queryFn: () => api.getTopUserAgents({ from, to, tenant_id: tenantId || undefined }),
     refetchInterval: 4000,
   });
 

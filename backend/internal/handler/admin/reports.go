@@ -24,6 +24,27 @@ func NewReportsHandler(usageRepo *postgres.UsageRepository, failedRepo *postgres
 	return &ReportsHandler{usageRepo: usageRepo, failedRepo: failedRepo, userRepo: userRepo}
 }
 
+// reportLoc es la zona horaria en la que se interpretan las fechas de los reportes.
+// Debe coincidir con la que usa el upsert de monthly_usage_aggregates (hora local
+// del servidor, America/Lima); si la zona no está disponible, Perú no tiene horario
+// de verano, así que UTC-5 fijo es equivalente.
+var reportLoc = func() *time.Location {
+	if loc, err := time.LoadLocation("America/Lima"); err == nil {
+		return loc
+	}
+	return time.FixedZone("America/Lima", -5*60*60)
+}()
+
+// parseReportDate interpreta "YYYY-MM-DD" como las 00:00 de ese día en hora Lima.
+func parseReportDate(s string) (time.Time, error) {
+	return time.ParseInLocation("2006-01-02", s, reportLoc)
+}
+
+// endOfReportDay devuelve el último instante del día que empieza en dayStart.
+func endOfReportDay(dayStart time.Time) time.Time {
+	return dayStart.AddDate(0, 0, 1).Add(-time.Microsecond)
+}
+
 // FailureDetail describe un motivo de fallo con su conteo y metadatos de presentación.
 type FailureDetail struct {
 	Reason   string    `json:"reason"`
@@ -59,18 +80,18 @@ func (h *ReportsHandler) DailyUsage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	now := time.Now()
-	from := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	now := time.Now().In(reportLoc)
+	from := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, reportLoc)
 	to := now
 
 	if s := q.Get("from"); s != "" {
-		if t, err := time.Parse("2006-01-02", s); err == nil {
+		if t, err := parseReportDate(s); err == nil {
 			from = t
 		}
 	}
 	if s := q.Get("to"); s != "" {
-		if t, err := time.Parse("2006-01-02", s); err == nil {
-			to = t.Add(24*time.Hour - time.Second)
+		if t, err := parseReportDate(s); err == nil {
+			to = endOfReportDay(t)
 		}
 	}
 
@@ -358,24 +379,24 @@ func toFailureDetail(reason string, count int, lastSeen time.Time) *FailureDetai
 func parseUsageFilter(r *http.Request) (*postgres.UsageFilter, error) {
 	q := r.URL.Query()
 
-	now := time.Now()
+	now := time.Now().In(reportLoc)
 	// Default: mes actual
-	from := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	from := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, reportLoc)
 	to := now
 
 	if s := q.Get("from"); s != "" {
-		t, err := time.Parse("2006-01-02", s)
+		t, err := parseReportDate(s)
 		if err != nil {
 			return nil, fmt.Errorf("invalid from date, use YYYY-MM-DD")
 		}
 		from = t
 	}
 	if s := q.Get("to"); s != "" {
-		t, err := time.Parse("2006-01-02", s)
+		t, err := parseReportDate(s)
 		if err != nil {
 			return nil, fmt.Errorf("invalid to date, use YYYY-MM-DD")
 		}
-		to = t.Add(24*time.Hour - time.Second)
+		to = endOfReportDay(t)
 	}
 
 	f := &postgres.UsageFilter{

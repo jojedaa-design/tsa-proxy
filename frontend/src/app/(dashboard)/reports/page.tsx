@@ -44,12 +44,8 @@ function CategoryBadge({ category }: { category: string }) {
 // ── Componente principal ──────────────────────────────────────
 
 export default function ReportsPage() {
-  const [from, setFrom] = useState(() => {
-    const d = new Date();
-    d.setDate(1);
-    return d.toISOString().split("T")[0];
-  });
-  const [to, setTo]     = useState(() => new Date().toISOString().split("T")[0]);
+  const [from, setFrom] = useState(() => `${currentMonthInLima()}-01`);
+  const [to, setTo]     = useState(todayInLima);
   const [tenantId, setTenantId] = useState("");
   const [isAdminOrSuperAdmin, setIsAdminOrSuperAdmin] = useState(false);
   const [isViewer, setIsViewer] = useState(false);
@@ -312,7 +308,7 @@ export default function ReportsPage() {
                 <input
                   type="date"
                   value={selectedDay}
-                  max={new Date().toISOString().split("T")[0]}
+                  max={todayInLima()}
                   onChange={(e) => setSelectedDay(e.target.value)}
                   className="input py-1.5 text-sm"
                 />
@@ -327,7 +323,7 @@ export default function ReportsPage() {
                 <input
                   type="month"
                   value={selectedMonth}
-                  max={`${currentYear}-${String(new Date().getMonth() + 1).padStart(2, "0")}`}
+                  max={currentMonthInLima()}
                   onChange={(e) => setSelectedMonth(e.target.value)}
                   className="input py-1.5 text-sm"
                 />

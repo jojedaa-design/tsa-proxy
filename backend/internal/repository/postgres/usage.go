@@ -400,14 +400,14 @@ type DailyUsage struct {
 func (r *UsageRepository) GetDailyConsumption(ctx context.Context, tenantID uuid.UUID, from, to time.Time) ([]*DailyUsage, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT
-			DATE(occurred_at)::text AS date,
+			DATE(occurred_at AT TIME ZONE 'America/Lima')::text AS date,
 			COUNT(*)                                              AS total_requests,
 			COUNT(*) FILTER (WHERE status = 'success')           AS successful_requests,
 			COUNT(*) FILTER (WHERE status = 'error')             AS failed_requests,
 			COUNT(*) FILTER (WHERE status = 'rejected')          AS rejected_requests
 		FROM usage_events
 		WHERE tenant_id = $1 AND occurred_at >= $2 AND occurred_at <= $3
-		GROUP BY DATE(occurred_at)
+		GROUP BY DATE(occurred_at AT TIME ZONE 'America/Lima')
 		ORDER BY date ASC
 	`, tenantID, from, to)
 	if err != nil {

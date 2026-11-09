@@ -44,9 +44,30 @@ function CategoryBadge({ category }: { category: string }) {
 // ── Componente principal ──────────────────────────────────────
 
 export default function ReportsPage() {
-  const [from, setFrom] = useState(() => `${currentMonthInLima()}-01`);
-  const [to, setTo]     = useState(todayInLima);
   const [tenantId, setTenantId] = useState("");
+
+  // Período del reporte: lo elige el selector Día / Mes / Año y gobierna todos los
+  // bloques de la página (resumen, IPs, software, fallos y actividad de sellos).
+  const [consumptionView, setConsumptionView] = useState<"day" | "month" | "year">("day");
+  const [selectedDay, setSelectedDay] = useState(todayInLima);
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthInLima);
+  const [selectedYear, setSelectedYear] = useState(() => String(currentYearInLima()));
+
+  // Rango exacto según la vista activa
+  const from = consumptionView === "day"
+    ? selectedDay
+    : consumptionView === "month"
+    ? `${selectedMonth}-01`
+    : `${selectedYear}-01-01`;
+
+  const to = consumptionView === "day"
+    ? selectedDay
+    : consumptionView === "month"
+    ? (() => {
+        const [y, m] = selectedMonth.split("-").map(Number);
+        return `${selectedMonth}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
+      })()
+    : `${selectedYear}-12-31`;
   const [isAdminOrSuperAdmin, setIsAdminOrSuperAdmin] = useState(false);
   const [isViewer, setIsViewer] = useState(false);
   const [viewerTenant, setViewerTenant] = useState<{ id: string; name: string } | null>(null);
@@ -112,30 +133,9 @@ export default function ReportsPage() {
     refetchInterval: 4000,
   });
 
-  const [consumptionView, setConsumptionView] = useState<"day" | "month" | "year">("day");
-  const [selectedDay, setSelectedDay] = useState(todayInLima);
-  const [selectedMonth, setSelectedMonth] = useState(currentMonthInLima);
-  const [selectedYear, setSelectedYear] = useState(() => String(currentYearInLima()));
-
-  // Rango exacto según la vista activa
-  const consumptionFrom = consumptionView === "day"
-    ? selectedDay
-    : consumptionView === "month"
-    ? `${selectedMonth}-01`
-    : `${selectedYear}-01-01`;
-
-  const consumptionTo = consumptionView === "day"
-    ? selectedDay
-    : consumptionView === "month"
-    ? (() => {
-        const [y, m] = selectedMonth.split("-").map(Number);
-        return `${selectedMonth}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`;
-      })()
-    : `${selectedYear}-12-31`;
-
   const { data: dailyData, isLoading: dailyLoading } = useQuery({
-    queryKey: ["daily-usage", tenantId, consumptionFrom, consumptionTo],
-    queryFn: () => api.getDailyUsage(tenantId, consumptionFrom, consumptionTo),
+    queryKey: ["daily-usage", tenantId, from, to],
+    queryFn: () => api.getDailyUsage(tenantId, from, to),
     enabled: !!tenantId,
     refetchInterval: 4000,
   });
@@ -163,7 +163,9 @@ export default function ReportsPage() {
         tenantName,
         from,
         to,
-        summary: data?.summary as Record<string, unknown> | undefined,
+        // El resumen sale de agregados mensuales: en la vista Día mostraría el mes
+        // completo bajo un período de un solo día, así que se omite.
+        summary: consumptionView === "day" ? undefined : (data?.summary as Record<string, unknown> | undefined),
         bundles: bundleData,
         dailyUsage: dailyData ?? undefined,
         ips: ipsData?.data,
@@ -213,13 +215,20 @@ export default function ReportsPage() {
 
       {/* Summary cards */}
       {data?.summary && (
-        <div className="grid grid-cols-3 gap-4">
-          {Object.entries(data.summary as Record<string, unknown>).map(([k, v]) => (
-            <div key={k} className="card p-4">
-              <p className="text-xs text-gray-500 uppercase tracking-wide">{k.replace(/_/g, " ")}</p>
-              <p className="text-2xl font-bold text-gray-900 mt-1">{String(v)}</p>
-            </div>
-          ))}
+        <div>
+          <div className="grid grid-cols-3 gap-4">
+            {Object.entries(data.summary as Record<string, unknown>).map(([k, v]) => (
+              <div key={k} className="card p-4">
+                <p className="text-xs text-gray-500 uppercase tracking-wide">{k.replace(/_/g, " ")}</p>
+                <p className="text-2xl font-bold text-gray-900 mt-1">{String(v)}</p>
+              </div>
+            ))}
+          </div>
+          {consumptionView === "day" && (
+            <p className="text-xs text-gray-400 mt-1.5">
+              Resumen mensual: en la vista Día muestra el mes completo de la fecha elegida.
+            </p>
+          )}
         </div>
       )}
 
@@ -277,9 +286,8 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {/* Consumo de sellos por período */}
-      {tenantId && (
-        <div className="card p-6">
+      {/* Consumo de sellos por período: el selector rige toda la página, con o sin cliente */}
+      <div className="card p-6">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
             <h2 className="text-lg font-semibold text-gray-900">Actividad de sellos por período</h2>
             {/* Pestañas de vista */}
@@ -348,7 +356,12 @@ export default function ReportsPage() {
             )}
           </div>
 
-          {dailyLoading ? (
+          {!tenantId ? (
+            <p className="text-gray-500 text-sm">
+              Selecciona un cliente para ver el resumen de sellos del período. Las tablas
+              de abajo (fallos, IPs y software) ya siguen este período.
+            </p>
+          ) : dailyLoading ? (
             <p className="text-gray-500 text-sm">Cargando...</p>
           ) : !dailyData || dailyData.length === 0 ? (
             <p className="text-gray-500 text-sm">Sin consumo registrado para el período seleccionado.</p>
@@ -356,7 +369,6 @@ export default function ReportsPage() {
             <PeriodSummary data={dailyData} />
           )}
         </div>
-      )}
 
       {/* ── Análisis de Fallos (solo Admin/SuperAdmin) ──────────────────────────────── */}
       {isAdminOrSuperAdmin && (

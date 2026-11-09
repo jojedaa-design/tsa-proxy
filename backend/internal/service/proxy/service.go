@@ -413,6 +413,10 @@ func resolveUpstreamCredentials(u *model.TSAUpstream, cfg *config.Config) (user,
 	return
 }
 
+// bundleAlertRetryInterval es el tiempo mínimo entre intentos de envío del
+// aviso de una misma bolsa.
+const bundleAlertRetryInterval = 30 * time.Minute
+
 // checkBundleAlerts verifica si alguna bolsa con umbral configurado ha cruzado
 // el porcentaje de consumo y, si aún no se notificó, envía el correo de alerta.
 // Usa Redis como throttle para ejecutarse como máximo una vez por minuto por tenant.
@@ -464,6 +468,15 @@ func (s *Service) checkBundleAlerts(ctx context.Context, tenantID uuid.UUID) {
 		already, err := s.quotaRepo.BundleAlreadyNotified(ctx, b.ID, threshold)
 		if err != nil || already {
 			continue // ya notificado o error de BD
+		}
+
+		// Espaciar los intentos por bolsa: si Brevo falla (IP no autorizada, caída)
+		// no se registra el envío, y sin esto se reintentaría cada minuto.
+		if s.cache != nil {
+			acquired, err := s.cache.TryAcquireThrottle(ctx, "notify:send:"+b.ID.String(), bundleAlertRetryInterval)
+			if err == nil && !acquired {
+				continue
+			}
 		}
 
 		// Enviar correo

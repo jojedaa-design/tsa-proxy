@@ -82,7 +82,7 @@ func (r *UsageRepository) GetAggregates(ctx context.Context, f UsageFilter) ([]*
 		argIdx++
 	}
 
-	// Para granularidad mensual usamos monthly_usage_aggregates con información de cuota
+	// Para granularidad mensual usamos monthly_usage_aggregates
 	rows, err := r.pool.Query(ctx, fmt.Sprintf(`
 		SELECT m.tenant_id, t.name,
 		       m.year, m.month,
@@ -92,7 +92,6 @@ func (r *UsageRepository) GetAggregates(ctx context.Context, f UsageFilter) ([]*
 		       CASE WHEN m.successful_requests > 0
 		            THEN m.total_latency_ms::float / m.successful_requests
 		            ELSE 0 END AS avg_latency_ms,
-		       q.monthly_limit,
 		       (SELECT COUNT(*) FROM usage_events ue
 		        WHERE ue.tenant_id = m.tenant_id
 		          AND EXTRACT(YEAR FROM ue.occurred_at) = m.year
@@ -102,7 +101,6 @@ func (r *UsageRepository) GetAggregates(ctx context.Context, f UsageFilter) ([]*
 		       m.last_updated_at
 		FROM monthly_usage_aggregates m
 		JOIN tenants t ON t.id = m.tenant_id
-		LEFT JOIN tenant_quotas q ON q.tenant_id = m.tenant_id
 		%s
 		ORDER BY m.year DESC, m.month DESC, m.total_requests DESC
 	`, where), args...)
@@ -120,7 +118,7 @@ func (r *UsageRepository) GetAggregates(ctx context.Context, f UsageFilter) ([]*
 			&a.TotalRequests, &a.SuccessfulRequests,
 			&a.FailedRequests, &a.RejectedRequests,
 			&a.TotalLatencyMs, &a.AvgLatencyMs,
-			&a.MonthlyLimit, &a.ExceededRequests,
+			&a.ExceededRequests,
 			&a.LastUpdatedAt,
 		); err != nil {
 			return nil, err
